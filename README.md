@@ -5,4 +5,6 @@ DressCode is a CLI that remembers the mistakes an AI coding agent actually makes
 
 ## Boundaries
 
-DressCode is a pure CLI over a state file plus git. It never spawns agents, never calls a model, never edits code. Triggering a review is the job of the companion `nanny` pi extension (separate repo at `/Users/opera_user/HomeProjects/nanny`) and of `pre-commit`.
+DressCode is a pure CLI over a state file plus git. It never spawns agents, never calls a model, never edits code.
+
+Running the review after an implementation is asked for in `AGENTS.md`, the same way `mypy` and `pytest` already are, and backstopped by `dresscode check` in `pre-commit`.

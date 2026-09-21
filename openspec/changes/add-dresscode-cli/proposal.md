@@ -22,7 +22,7 @@ observed -> active question (prose, model-checked) --2nd hit--> mechanizable -> 
 
 ## Non-goals (v0)
 
-- DressCode never spawns agents, never talks to a model, never edits code; triggering the review belongs to the `nanny` extension and to `pre-commit`.
+- DressCode never spawns agents, never talks to a model, never edits code. Asking for the review is `AGENTS.md`'s job; backstopping it is `pre-commit`'s.
 - No auto-decay of entries (see `backlog.md`).
 - No team-shared rule packs, no CI service, no dashboard.
 
