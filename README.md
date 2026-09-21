@@ -1,10 +1,7 @@
 # DressCode
 
-DressCode is a CLI that remembers the mistakes an AI coding agent actually makes, hands them back as questions after every implementation, and tracks each entry until it either graduates into a deterministic gate or is retired. Status: design only, nothing implemented yet; the shape lives in `openspec/changes/add-dresscode-cli/`.
+DressCode is a CLI that remembers the mistakes an AI coding agent actually makes, hands them back as questions after every implementation, and tracks each entry statistics (how many times it was useful). Status: design only, nothing implemented yet; the shape lives in `openspec/changes/add-dresscode-cli/`.
 
-```text
-observed -> active question (prose, model-checked) --2nd hit--> mechanizable -> gate (ast-grep / ruff) -> retired
-```
 
 ## Boundaries
 
