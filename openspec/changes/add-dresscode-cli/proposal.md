@@ -1,31 +1,43 @@
 ## Why
 
-AI coding agents repeat the same mistakes. The rules that matter live as prose in `AGENTS.md`, which models weight inconsistently, while the rules that are mechanized (`ast-grep`, `ruff`, `pre-commit`) reliably police trivia. Nothing remembers what the agent actually gets wrong, and there is no conveyor belt from "prose rule that keeps losing" to "deterministic gate".
+AI coding agents repeat the same mistakes. The rules that matter live as prose in `AGENTS.md`, which fades from attention over a long implementation and which models weight inconsistently, while the rules that are mechanized (`ast-grep`, `ruff`, `pre-commit`) reliably police trivia. Nothing checks, at hand-over time, that the taste a given production repo demands was actually honoured — and nothing remembers what the agent gets wrong.
 
 ## What changes
 
-DressCode stores a live list of questions about mistakes the agent commonly makes, hands them to a reviewer after implementation, records verdicts, and tracks each entry lifecycle.
+DressCode stores a list of boolean questions about mistakes the agent commonly makes, hands them to a fresh-context reviewer after implementation with the wanted answer sealed, records verdicts against the current diff, and refuses to go green until every question is answered as expected or the violation is documented.
 
 ```text
-observed -> active question (prose, model-checked) --2nd hit--> mechanizable -> gate (ast-grep / ruff) -> retired
+implement ──> dresscode list      questions only, expectations sealed
+              dresscode attest    reviewer proves / claims it is not the implementer
+              dresscode answer    verdict + evidence  -> reveal printed back
+              dresscode waive     violation ships, with a reason on the record
+              dresscode check     the gate: all green, or exactly what to fix
+              dresscode report    human read-out at the end of the task
 ```
 
 ## v0 scope
 
-- Per-repo state directory `.dresscode/` with entries carrying `id`, `question`, `scope`, `hit count`, `state` and timestamps.
-- Command `dresscode list` returning the questions applicable to the current diff.
-- Command `dresscode answer <id> --clean|--violated --evidence <text>` recording a verdict and bumping the hit count.
-- Command `dresscode check` exiting non-zero when questions are unanswered or violations unfixed, suitable for `pre-commit`.
-- Commands `dresscode add` and `dresscode retire`.
-- Command `dresscode size` measuring the current diff against the merge base and exiting non-zero past a threshold.
+- Global run state keyed by repo and branch, in `$XDG_STATE_HOME/dresscode/`, with every verdict pinned to a fingerprint of the diff it was given.
+- Three-layer config: `~/.config/dresscode/repos/<repo_id>.toml`, repo-local `.dresscode/`, `~/.config/dresscode/config.toml`, merged by entry `id`.
+- Entries carrying `id`, `question`, sealed `expects` and `reveal`, optional `context` command, counters and timestamps.
+- `dresscode list` — the applicable questions plus their context command output, never the expectation.
+- `dresscode attest --fresh|--same-session` — the reviewer handshake, required before the first answer; refuses a session identity already seen implementing this run.
+- `dresscode answer <id> --yes|--no|--n-a --evidence <text>` — records the verdict, then prints the reveal.
+- `dresscode waive <id> --reason <text>` — lets a violation ship, on the record.
+- `dresscode check [--strict]` — the gate for `pre-commit` and for the agent: exit `0` green or waived, `1` action needed with the fixing command named per entry, `2` usage error. `--strict` fails on waivers.
+- `dresscode report` — colorful human summary of why the task is believed done.
+- `dresscode add`, `dresscode retire <id> [--reason]`, `dresscode reset`, `dresscode trust`.
+- `dresscode diff [--numstat]` — the diff definition as a command, so entries can use it as context; merge base to working tree, untracked included, configured exclusions applied.
 - Every command offering `--json` so a hook, a gate and a subagent can all consume the output.
+- Python and `uv`, installable with `uv tool install .`.
 
 ## Non-goals (v0)
 
 - DressCode never spawns agents, never talks to a model, never edits code. Asking for the review is `AGENTS.md`'s job; backstopping it is `pre-commit`'s.
-- No auto-decay of entries (see `backlog.md`).
-- No team-shared rule packs, no CI service, no dashboard.
+- No lifecycle automation: entries do not graduate to `ast-grep` on their own and do not decay (see `backlog.md`).
+- No entry scoping by glob or tag; an inapplicable question is answered `n-a`.
+- No seeded rule list, no team-shared rule packs, no CI service, no dashboard.
 
 ## Why a tool and not a markdown checklist
 
-Entries carry counters and state transitions. A markdown list cannot count hits, cannot gate a commit, and cannot tell "the agent mastered this" from "the reviewer cannot detect this".
+A markdown list cannot seal the wanted answer from the reviewer, cannot bind a verdict to the diff it was given, cannot tell a documented violation from an undocumented one, and cannot gate a commit.

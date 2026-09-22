@@ -1,8 +1,12 @@
 schema: spec-driven
 
 context: |
-  DressCode is a CLI that tracks recurring AI coding-agent mistakes as questions,
-  records per-diff verdicts, and manages their lifecycle towards deterministic gates.
+  DressCode is a CLI that tracks recurring AI coding-agent mistakes as boolean
+  questions with sealed expected answers, hands them to a fresh-context reviewer
+  after implementation, and gates hand-over until every question is answered as
+  expected or the violation is waived with a reason.
 
-  The implementation language is not yet chosen; the repo currently contains
-  planning artifacts only.
+  Implementation: Python with `uv`, `typer` + `rich`, `ruff` + `ty` + `pytest`,
+  shaped like the `metronome` CLI. State is a global store keyed by repo and
+  branch; config is layered (private per-repo, repo-local `.dresscode/`, global).
+  The repo currently contains planning artifacts only.
