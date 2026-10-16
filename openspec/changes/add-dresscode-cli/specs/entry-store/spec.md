@@ -34,8 +34,8 @@ The system SHALL merge configuration from three layers, highest priority first: 
 
 #### Scenario: Private layer wins
 
-- **WHEN** the repository-local layer sets `freshness = "attested"` and `~/.config/dresscode/repos/<repo_id>.toml` sets `freshness = "strict"`
-- **THEN** the effective policy is `strict`
+- **WHEN** the repository-local layer sets `base_ref = "origin/main"` and `~/.config/dresscode/repos/<repo_id>.toml` sets `base_ref = "origin/develop"`
+- **THEN** the effective `base_ref` is `origin/develop`
 
 #### Scenario: No configuration at all
 

@@ -43,7 +43,7 @@ The system SHALL use exit code `0` for green or waived, `1` for action needed, a
 
 ### Requirement: Waivers
 
-The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry whose current verdict contradicts `expects`, SHALL store the reason, author identity, timestamp and the current diff fingerprint, and SHALL make `check` exit `0` with status `passed-with-waivers`. A waiver SHALL become stale exactly as verdicts do, and SHALL NOT outlive the run.
+The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry whose current verdict contradicts `expects`, SHALL store the reason, timestamp and the current diff fingerprint, and SHALL make `check` exit `0` with status `passed-with-waivers`. A waiver SHALL become stale exactly as verdicts do, and SHALL NOT outlive the run.
 
 #### Scenario: Documented violation ships
 
@@ -67,26 +67,31 @@ The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry
 
 ### Requirement: Strict gate
 
-The system SHALL support `dresscode check --strict`, exiting `1` when the run passes only through waivers or with a recorded freshness downgrade, so CI can hold a line the local gate does not.
+The system SHALL support `dresscode check --strict`, applying all normal gate checks and additionally exiting `1` when the run passes only through waivers, so CI can hold a line the local gate does not. Unverified reviewer freshness SHALL NOT block either mode.
 
 #### Scenario: CI rejects a waived run
 
 - **WHEN** a run is `passed-with-waivers` and `check --strict` runs
 - **THEN** it exits `1` and lists the waivers
 
-#### Scenario: CI rejects a downgraded review
+#### Scenario: Unverified reviewer freshness does not block
 
-- **WHEN** the run was answered under an attested-only or disabled freshness policy
-- **THEN** `check --strict` exits `1` naming the downgrade
+- **WHEN** every entry has a current matching or `n-a` verdict, no waivers are needed, and reviewer freshness is unverified
+- **THEN** both `check` and `check --strict` exit `0`
 
 ### Requirement: Human report
 
-The system SHALL provide `dresscode report`, printing a colored summary: overall status, the diff size, the freshness level that held, each entry with its verdict, evidence and reveal, and waivers in their own section.
+The system SHALL provide `dresscode report`, printing a colored summary: overall status, the diff size, reviewer freshness explicitly labeled `unverified`, each entry with its verdict, evidence and reveal, and waivers in their own section. It SHALL NOT claim that a passing gate proves independent review.
 
 #### Scenario: Report after a green run
 
 - **WHEN** `dresscode report` runs on a green run
-- **THEN** it shows every question with its verdict and evidence, and states the freshness level
+- **THEN** it shows every question with its verdict and evidence, and labels reviewer freshness `unverified`
+
+#### Scenario: Structured report states the same limitation
+
+- **WHEN** `dresscode report --json` runs
+- **THEN** the output includes `reviewer_freshness: "unverified"`, regardless of the gate status
 
 #### Scenario: Waivers are visible
 

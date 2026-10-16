@@ -8,7 +8,6 @@ DressCode stores a list of boolean questions about mistakes the agent commonly m
 
 ```text
 implement ──> dresscode list      questions only, expectations sealed
-              dresscode attest    reviewer proves / claims it is not the implementer
               dresscode answer    verdict + evidence  -> reveal printed back
               dresscode waive     violation ships, with a reason on the record
               dresscode check     the gate: all green, or exactly what to fix
@@ -21,11 +20,10 @@ implement ──> dresscode list      questions only, expectations sealed
 - Three-layer config: `~/.config/dresscode/repos/<repo_id>.toml`, repo-local `.dresscode/`, `~/.config/dresscode/config.toml`, merged by entry `id`.
 - Entries carrying `id`, `question`, sealed `expects` and `reveal`, optional `context` command, counters and timestamps.
 - `dresscode list` — the applicable questions plus their context command output, never the expectation.
-- `dresscode attest --fresh|--same-session` — the reviewer handshake, required before the first answer; refuses a session identity already seen implementing this run.
 - `dresscode answer <id> --yes|--no|--n-a --evidence <text>` — records the verdict, then prints the reveal.
 - `dresscode waive <id> --reason <text>` — lets a violation ship, on the record.
 - `dresscode check [--strict]` — the gate for `pre-commit` and for the agent: exit `0` green or waived, `1` action needed with the fixing command named per entry, `2` usage error. `--strict` fails on waivers.
-- `dresscode report` — colorful human summary of why the task is believed done.
+- `dresscode report` — colorful human summary of why the task is believed done, explicitly labeling reviewer freshness `unverified`.
 - `dresscode add`, `dresscode retire <id> [--reason]`, `dresscode reset`, `dresscode trust`.
 - `dresscode diff [--numstat]` — the diff definition as a command, so entries can use it as context; merge base to working tree, untracked included, configured exclusions applied.
 - Every command offering `--json` so a hook, a gate and a subagent can all consume the output.
@@ -33,7 +31,8 @@ implement ──> dresscode list      questions only, expectations sealed
 
 ## Non-goals (v0)
 
-- DressCode never spawns agents, never talks to a model, never edits code. Asking for the review is `AGENTS.md`'s job; backstopping it is `pre-commit`'s.
+- DressCode never spawns agents, never talks to a model, never edits code. Requiring a fresh-context reviewer is `AGENTS.md`'s or the harness's job; backstopping recorded answers against the current diff is `pre-commit`'s.
+- No reviewer-independence enforcement: no attestation handshake, session adapters, implementer tracking, same-session refusal or freshness policies (see `backlog.md`). V0 can accept a self-review; a passing gate is not proof of independent review.
 - No lifecycle automation: entries do not graduate to `ast-grep` on their own and do not decay (see `backlog.md`).
 - No entry scoping by glob or tag; an inapplicable question is answered `n-a`.
 - No seeded rule list, no team-shared rule packs, no CI service, no dashboard.

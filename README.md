@@ -8,6 +8,6 @@ Status: design only, nothing implemented yet; the shape lives in `openspec/chang
 
 DressCode is a pure CLI over a state store plus git. It never spawns agents, never calls a model, never edits code.
 
-Running the review after an implementation is asked for in `AGENTS.md`, the same way `mypy` and `pytest` already are, and backstopped by `dresscode check` in `pre-commit`.
+Running a fresh-context review after an implementation is required by `AGENTS.md` or the harness instructions, the same way `mypy` and `pytest` already are, and backstopped by `dresscode check` in `pre-commit`. V0 gates recorded answers against the current diff, not reviewer independence: no attestation or session identity is required, and `dresscode report` labels reviewer freshness `unverified`. `dresscode check --strict` additionally rejects waivers, not unverified freshness.
 
 State is global, never in the repo: run state under `$XDG_STATE_HOME/dresscode/`, keyed by repo and branch. Config is layered — private per-repo, then the repo's own `.dresscode/`, then your global defaults.

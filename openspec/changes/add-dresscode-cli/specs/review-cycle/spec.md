@@ -1,6 +1,6 @@
 ## Purpose
 
-Run one review: identify the run, capture who implemented it, hand sealed questions to a reviewer that is not that implementer, record verdicts against the diff they were given, and expire them when the diff moves.
+Run one review: identify the run, hand sealed questions to the reviewer, record verdicts against the diff they were given, and expire them when the diff moves. A fresh-context reviewer is required by `AGENTS.md` or the harness instructions; v0 does not verify reviewer independence.
 
 ## ADDED Requirements
 
@@ -32,66 +32,19 @@ The system SHALL store run state under `$XDG_STATE_HOME/dresscode/runs/` (defaul
 - **WHEN** a full review is recorded
 - **THEN** `git status` in the repository is unchanged
 
-### Requirement: Implementer identity capture
+### Requirement: Review without identity checks
 
-The system SHALL record the calling session identity as an implementer identity of the run when `check`, `diff`, `add`, `waive`, `report` or `reset` runs, and SHALL NOT do so for `list`, `attest` or `answer`. Identity comes from a harness adapter exposing `{harness, session_id, is_child}`, with a `pi` adapter reading `PI_SUBAGENT_CHILD` and `PI_SESSION_ID`, and a configurable `env` adapter for other harnesses.
+The system SHALL accept otherwise valid answers without an attestation handshake or session identity, and SHALL NOT detect or record implementer or reviewer session identities. The CLI does not enforce the workflow's fresh-context reviewer requirement.
 
-#### Scenario: Implementer observed through the gate
+#### Scenario: First answer without attestation or identity
 
-- **WHEN** the implementing session runs `dresscode check` before requesting a review
-- **THEN** its session identity is stored as an implementer identity of the run
+- **WHEN** `dresscode list` has been run and the first valid `dresscode answer` is submitted without any attestation or session identity
+- **THEN** the verdict is recorded without a reviewer-independence check
 
-#### Scenario: Reviewer commands do not claim implementer role
+#### Scenario: Same session runs the gate and answers
 
-- **WHEN** a session runs only `list`, `attest` and `answer`
-- **THEN** it is never recorded as an implementer identity
-
-#### Scenario: No adapter matches
-
-- **WHEN** no adapter can supply a session identity
-- **THEN** the run records that identity was unavailable, rather than failing
-
-### Requirement: Same-session answers are refused
-
-The system SHALL refuse `attest` and `answer` from a session identity already recorded as an implementer of the run, under every `freshness` policy except `off`. This catches inline self-grading; it does not prove freshness, and the limitation SHALL be stated in the refusal message.
-
-#### Scenario: Implementer tries to grade itself
-
-- **WHEN** the session that ran `check` then runs `answer`
-- **THEN** the verdict is refused with exit `1` and a message explaining that a different session must answer
-
-#### Scenario: Policy off
-
-- **WHEN** `freshness = "off"`
-- **THEN** the answer is accepted and the run records that freshness checking was disabled
-
-### Requirement: Attestation handshake
-
-The system SHALL require `dresscode attest --fresh | --same-session` before the first answer of a run, recording the claim, the reviewer identity and the timestamp. `--same-session` SHALL be refused under policies `strict` and `attested`, with guidance to run the review in a fresh session, and accepted under `off` as a recorded downgrade.
-
-#### Scenario: Answer before attestation
-
-- **WHEN** `dresscode answer` runs on a run with no attestation
-- **THEN** it is refused with exit `1` and names `dresscode attest` as the fix
-
-#### Scenario: Honest self-declaration blocks
-
-- **WHEN** `dresscode attest --same-session` runs under the default policy
-- **THEN** it is refused with exit `1` and guidance to spawn a fresh reviewer
-
-### Requirement: Freshness policy
-
-The system SHALL support `freshness` values `strict`, `attested` (default) and `off`. Under `strict` an answer SHALL be refused unless an adapter supplies a reviewer identity that differs from every implementer identity. Under `attested` an answer SHALL be accepted when identity is unavailable, on the strength of the attestation alone, and the run SHALL record the downgrade.
-
-#### Scenario: Strict without adapter identity
-
-- **WHEN** `freshness = "strict"` and no adapter can supply an identity
-- **THEN** the answer is refused with exit `1` and a message naming the missing identity source
-
-#### Scenario: Attested without adapter identity
-
-- **WHEN** the default policy applies and no adapter can supply an identity
-- **THEN** the answer is accepted and the run is marked as attested-only
+- **WHEN** the session that ran `dresscode check` submits a valid answer
+- **THEN** the verdict is accepted, without recording a session identity or claiming independent review
 
 ### Requirement: Question delivery
 
@@ -109,7 +62,7 @@ The system SHALL emit from `dresscode list` every enabled, non-retired entry as 
 
 ### Requirement: Recording a verdict
 
-The system SHALL accept `dresscode answer <id> --yes|--no|--n-a --evidence <text>` with non-empty evidence, store the verdict with the current diff fingerprint, the reviewer identity and a timestamp, update the entry counters, and respond with the expected answer, whether the verdict matched, and the reveal. Answering again SHALL replace the current verdict and keep the previous one in the run history.
+The system SHALL accept `dresscode answer <id> --yes|--no|--n-a --evidence <text>` with non-empty evidence, store the verdict and evidence with the current diff fingerprint and a timestamp, update the entry counters, and respond with the expected answer, whether the verdict matched, and the reveal. Answering again SHALL replace the current verdict and keep the previous one in the run history.
 
 #### Scenario: Evidence required
 
@@ -151,7 +104,7 @@ The system SHALL mark a verdict `stale` when the current diff fingerprint differ
 
 ### Requirement: Resetting a run
 
-The system SHALL provide `dresscode reset`, discarding the current run's attestation and verdicts while preserving entry counters.
+The system SHALL provide `dresscode reset`, discarding the current run's verdicts and waivers while preserving entry counters.
 
 #### Scenario: Start a review again
 
