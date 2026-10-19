@@ -9,14 +9,14 @@ DressCode is a CLI that remembers the mistakes an AI coding agent actually makes
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.14. From this checkout:
 
 ```sh
-uv tool install .
+uv tool install --editable .
 dresscode --help
 ```
 
-Ensure uv's tool binary directory is on your `PATH` (`uv tool update-shell` can set it up). To reinstall after updating the checkout:
+Ensure uv's tool binary directory is on your `PATH` (`uv tool update-shell` can set it up). The editable installation picks up source changes on the next run; keep this checkout in place. Reinstall after changing dependencies or CLI entry points:
 
 ```sh
-uv tool install --force --refresh .
+uv tool install --force --editable .
 ```
 
 Without a tool installation, run from the checkout:
