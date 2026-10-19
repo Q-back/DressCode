@@ -149,7 +149,11 @@ Binary files use `-` for both counts and do not contribute to line totals. Paths
 
 `--json` emits one document with `base_ref`, `merge_base`, `fingerprint`, `files` (`path`, `added`, `removed`) and `totals` (`added`, `removed`). Binary file counts are `null`. JSON takes precedence if combined with `--numstat`; successful output has no stderr text. An empty diff succeeds with an empty file list and zero totals.
 
-The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and current content (symlinks use the link text, not the target). It stays stable across repeated reads and excluded edits. Staging or committing unchanged scoped content also preserves it when the merge base is unchanged. A scoped content edit changes it even if the line counts stay the same. This is the value used to bind review answers to the reviewed changes.
+The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and current content (symlinks use the link text, not the target). It stays stable across repeated reads and excluded edits. Staging or committing unchanged scoped content also preserves it when the merge base is unchanged, including removing a path from the index and adding it again. A scoped content edit changes it even if the line counts stay the same. This is the value used to bind review answers to the reviewed changes.
+
+An untracked nested Git repository exits `2` with a named error rather than being silently skipped. Add it as a submodule or explicitly exclude its path with `diff.exclude`.
+
+**Known limitation:** dirty submodule contents are not safely bound to the fingerprint. Do not use these fingerprints to approve uncommitted changes inside submodules.
 
 ## Development
 

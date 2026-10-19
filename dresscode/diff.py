@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,9 +73,7 @@ def collect(config: Configuration) -> ScopedDiff:
         old_mode, new_mode, old_oid, _, _ = header[1:].decode().split()
         metadata[os.fsdecode(path)] = (old_mode, old_oid, new_mode)
     try:
-        untracked_files, untracked_metadata = _untracked(root, pathspecs)
-        files.extend(untracked_files)
-        metadata.update(untracked_metadata)
+        _include_untracked(root, pathspecs, files, metadata)
         fingerprint = _fingerprint(root, metadata, arguments)
     except OSError as error:
         raise DiffError(f"Cannot read scoped content at {root}: {error}") from error
@@ -122,9 +121,12 @@ def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
     return root_commit, root_commit
 
 
-def _untracked(
-    root: Path, pathspecs: tuple[str, ...]
-) -> tuple[list[FileChange], dict[str, tuple[str, str, str]]]:
+def _include_untracked(
+    root: Path,
+    pathspecs: tuple[str, ...],
+    files: list[FileChange],
+    metadata: dict[str, tuple[str, str, str]],
+) -> None:
     names = _git(
         root, "ls-files", "--others", "--exclude-standard", "-z", "--", *pathspecs
     )
@@ -134,11 +136,14 @@ def _untracked(
         ).strip()
         != b"false"
     )
-    files = []
-    metadata = {}
     for name in filter(None, names.split(b"\0")):
         path = os.fsdecode(name)
         mode = (root / path).lstat().st_mode
+        if stat.S_ISDIR(mode):
+            raise DiffError(
+                f"Untracked nested Git repository {path!r}: add it as a submodule "
+                "or exclude it with diff.exclude"
+            )
         git_mode = (
             "120000"
             if stat.S_ISLNK(mode)
@@ -146,8 +151,31 @@ def _untracked(
             if executable_bits and mode & 0o111
             else "100644"
         )
-        metadata[path] = ("000000", "", git_mode)
-        counts = _git(
+        old_mode, old_oid, _ = metadata.get(path, ("000000", "", "000000"))
+        counts = _untracked_numstat(root, path, old_mode, old_oid)
+        if path in metadata:
+            files[:] = [file for file in files if file.path != path]
+        if counts:
+            metadata[path] = (old_mode, old_oid, git_mode)
+            added, removed, _ = counts.split(b"\t", 2)
+            files.append(FileChange(path, _count(added), _count(removed)))
+        else:
+            metadata.pop(path, None)
+
+
+def _untracked_numstat(root: Path, path: str, old_mode: str, old_oid: str) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="dresscode-baseline-") as temporary:
+        before = os.devnull
+        if old_mode != "000000":
+            baseline = Path(temporary) / Path(path).name
+            content = _git(root, "cat-file", "blob", old_oid)
+            if old_mode == "120000":
+                baseline.symlink_to(os.fsdecode(content))
+            else:
+                baseline.write_bytes(content)
+                baseline.chmod(int(old_mode, 8) & 0o777)
+            before = str(baseline)
+        return _git(
             root,
             "diff",
             "--no-index",
@@ -155,13 +183,10 @@ def _untracked(
             "--numstat",
             "-z",
             "--",
-            os.devnull,
+            before,
             path,
             allowed_codes=(0, 1),
         )
-        added, removed, _ = counts.split(b"\t", 2)
-        files.append(FileChange(path, _count(added), _count(removed)))
-    return files, metadata
 
 
 def _pathspecs(config: Configuration) -> tuple[str, ...]:

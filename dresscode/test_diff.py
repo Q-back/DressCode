@@ -156,6 +156,44 @@ def test_fingerprint_tracks_content_not_index_or_commit_boundaries(
     assert original != scope(git_repo).fingerprint
 
 
+@pytest.mark.parametrize(
+    "content, executable",
+    [
+        (b"Test repository.\n", False),
+        (b"edited\n", False),
+        (b"\0binary", False),
+        (b"Test repository.\n", True),
+    ],
+    ids=["unchanged", "edited", "binary", "mode-only"],
+)
+def test_index_removal_and_readdition_preserve_the_reviewed_result(
+    git_repo: Path, content: bytes, executable: bool
+) -> None:
+    path = git_repo / "README.md"
+    path.write_bytes(content)
+    if executable:
+        path.chmod(0o755)
+    before = scope(git_repo)
+    git(git_repo, "rm", "--cached", "README.md")
+    assert scope(git_repo) == before
+    git(git_repo, "add", "README.md")
+    assert scope(git_repo) == before
+
+
+def test_index_removal_preserves_symlink_baseline(git_repo: Path) -> None:
+    path = git_repo / "link"
+    path.symlink_to("old-target")
+    git(git_repo, "add", "link")
+    git(git_repo, "commit", "--message", "Link baseline")
+    path.unlink()
+    path.symlink_to("new-target")
+    before = scope(git_repo, base_ref="HEAD")
+    git(git_repo, "rm", "--cached", "link")
+    assert scope(git_repo, base_ref="HEAD") == before
+    git(git_repo, "add", "link")
+    assert scope(git_repo, base_ref="HEAD") == before
+
+
 def test_binary_and_unusual_paths_survive_staging(git_repo: Path) -> None:
     path = "tab\tand\nnewline.bin"
     (git_repo / path).write_bytes(b"\0binary")

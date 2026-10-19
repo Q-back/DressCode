@@ -90,6 +90,46 @@ def test_diff_outside_repository_is_a_usage_error(
         assert result.stdout == ""
 
 
+@pytest.mark.parametrize("json_output", [False, True])
+def test_untracked_nested_repository_has_an_actionable_error(
+    git_repo: Path, xdg_home: Path, monkeypatch: pytest.MonkeyPatch, json_output: bool
+) -> None:
+    nested = git_repo / "nested"
+    nested.mkdir()
+    git(nested, "init", "--initial-branch=main")
+    (nested / "file.txt").write_text("nested content\n")
+    git(nested, "add", ".")
+    git(
+        nested,
+        "-c",
+        "user.name=Tests",
+        "-c",
+        "user.email=tests@dresscode.invalid",
+        "commit",
+        "-m",
+        "Nested baseline",
+    )
+    monkeypatch.chdir(git_repo)
+    result = runner.invoke(app, ["diff", *(["--json"] if json_output else [])])
+    assert result.exit_code == 2, repr(result.exception)
+    if json_output:
+        response = json.loads(result.stdout)
+        assert response["status"] == "error"
+        message = response["error"]
+        assert result.stderr == ""
+    else:
+        message = result.stderr
+        assert result.stdout == ""
+    assert "nested/" in message
+    assert "diff.exclude" in message
+    config = xdg_home / "config/dresscode"
+    config.mkdir()
+    (config / "config.toml").write_text('[diff]\nexclude = ["nested"]\n')
+    excluded = runner.invoke(app, ["diff", "--json"])
+    assert excluded.exit_code == 0, excluded.output
+    assert json.loads(excluded.stdout)["files"] == []
+
+
 @pytest.mark.parametrize("config", ['base_ref = "missing"', "[diff]\nexclude = false"])
 def test_invalid_diff_configuration_returns_json_error(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch, config: str
