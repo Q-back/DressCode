@@ -194,6 +194,28 @@ def test_index_removal_preserves_symlink_baseline(git_repo: Path) -> None:
     assert scope(git_repo, base_ref="HEAD") == before
 
 
+@pytest.mark.parametrize("edit_content", [False, True], ids=["ignored-chmod", "edited"])
+def test_index_removal_preserves_ignored_executable_baseline(
+    git_repo: Path, edit_content: bool
+) -> None:
+    path = git_repo / "script.sh"
+    path.write_text("old\n")
+    path.chmod(0o755)
+    git(git_repo, "add", "script.sh")
+    git(git_repo, "commit", "--message", "Executable baseline")
+    git(git_repo, "config", "core.filemode", "false")
+    if edit_content:
+        path.write_text("new\n")
+    else:
+        path.chmod(0o644)
+    before = scope(git_repo, base_ref="HEAD")
+    git(git_repo, "rm", "--cached", "script.sh")
+    assert scope(git_repo, base_ref="HEAD") == before
+    git(git_repo, "add", "script.sh")
+    assert git(git_repo, "ls-files", "--stage", "script.sh").startswith("100644 ")
+    assert scope(git_repo, base_ref="HEAD").fingerprint != before.fingerprint
+
+
 def test_binary_and_unusual_paths_survive_staging(git_repo: Path) -> None:
     path = "tab\tand\nnewline.bin"
     (git_repo / path).write_bytes(b"\0binary")

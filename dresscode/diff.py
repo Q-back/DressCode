@@ -152,7 +152,15 @@ def _include_untracked(
             else "100644"
         )
         old_mode, old_oid, _ = metadata.get(path, ("000000", "", "000000"))
-        counts = _untracked_numstat(root, path, old_mode, old_oid)
+        comparison_mode = int(old_mode, 8) & 0o777
+        if (
+            not executable_bits
+            and old_mode in ("100644", "100755")
+            and stat.S_ISREG(mode)
+        ):
+            git_mode = old_mode
+            comparison_mode = 0o755 if mode & 0o111 else 0o644
+        counts = _untracked_numstat(root, path, old_mode, old_oid, comparison_mode)
         if path in metadata:
             files[:] = [file for file in files if file.path != path]
         if counts:
@@ -163,7 +171,9 @@ def _include_untracked(
             metadata.pop(path, None)
 
 
-def _untracked_numstat(root: Path, path: str, old_mode: str, old_oid: str) -> bytes:
+def _untracked_numstat(
+    root: Path, path: str, old_mode: str, old_oid: str, comparison_mode: int
+) -> bytes:
     with tempfile.TemporaryDirectory(prefix="dresscode-baseline-") as temporary:
         before = os.devnull
         if old_mode != "000000":
@@ -173,7 +183,7 @@ def _untracked_numstat(root: Path, path: str, old_mode: str, old_oid: str) -> by
                 baseline.symlink_to(os.fsdecode(content))
             else:
                 baseline.write_bytes(content)
-                baseline.chmod(int(old_mode, 8) & 0o777)
+                baseline.chmod(comparison_mode)
             before = str(baseline)
         return _git(
             root,
