@@ -19,6 +19,14 @@ def test_origin_shapes_resolve_equally(origin: str) -> None:
     assert normalize_origin(origin) == "example.com/team/repo"
 
 
+@pytest.mark.parametrize(
+    "origin",
+    ["git@[2001:db8::1]:team/repo.git", "ssh://git@[2001:db8::1]/team/repo.git"],
+)
+def test_ipv6_origin_shapes_resolve_equally(origin: str) -> None:
+    assert normalize_origin(origin) == "[2001:db8::1]/team/repo"
+
+
 def test_discover_from_subdirectory_uses_origin(git_repo: Path) -> None:
     subprocess.run(
         ["git", "remote", "add", "origin", "git@example.com:team/repo.git"],
@@ -52,6 +60,42 @@ def test_linked_worktree_shares_identity(
 
     assert discover(linked).root == linked
     assert discover(linked).identity == discover(git_repo).identity
+
+
+@pytest.mark.parametrize("origin", [None, "https://example.com/team/repo.git"])
+def test_worktree_origin_override_does_not_split_clone_identity(
+    git_repo: Path, tmp_path: Path, origin: str | None
+) -> None:
+    linked = tmp_path / "linked"
+    for arguments in (
+        ("config", "extensions.worktreeConfig", "true"),
+        ("worktree", "add", str(linked), "-b", "linked"),
+    ):
+        subprocess.run(
+            ["git", *arguments], cwd=git_repo, check=True, capture_output=True
+        )
+    if origin is not None:
+        subprocess.run(
+            ["git", "config", "--local", "remote.origin.url", origin],
+            cwd=git_repo,
+            check=True,
+        )
+    subprocess.run(
+        [
+            "git",
+            "config",
+            "--worktree",
+            "remote.origin.url",
+            "git@other.test:other.git",
+        ],
+        cwd=linked,
+        check=True,
+    )
+
+    assert discover(linked).identity == discover(git_repo).identity
+    assert discover(git_repo).identity == (
+        "example.com/team/repo" if origin is not None else str(git_repo.resolve())
+    )
 
 
 def test_no_origin_uses_main_worktree_realpath(git_repo: Path, tmp_path: Path) -> None:

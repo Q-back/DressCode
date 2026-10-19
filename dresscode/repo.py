@@ -22,7 +22,7 @@ def discover(directory: Path | None = None) -> Repository:
     try:
         root = Path(_git(directory, "rev-parse", "--show-toplevel")).resolve()
         try:
-            origin = _git(root, "config", "--get", "remote.origin.url")
+            origin = _git(root, "config", "--local", "--get", "remote.origin.url")
         except subprocess.CalledProcessError as error:
             if error.returncode != 1:
                 raise
@@ -49,7 +49,7 @@ def normalize_origin(origin: str) -> str:
     if "://" in origin:
         parsed = urlsplit(origin)
         address = parsed.netloc.rsplit("@", 1)[-1] + parsed.path
-    elif match := re.fullmatch(r"(?:[^@/]+@)?([^/:]+):(.+)", origin):
+    elif match := re.fullmatch(r"(?:[^@/]+@)?(\[[^\]]+\]|[^/:]+):(.+)", origin):
         address = f"{match[1]}/{match[2].lstrip('/')}"
     else:
         address = origin
