@@ -1,8 +1,23 @@
 ## Purpose
 
-Turn recorded verdicts into a decision: a machine gate that says exactly what is missing, a documented way to ship a violation anyway, and a human read-out of why the task is believed done.
+Turn recorded verdicts into a decision: a machine gate before final task hand-over that says exactly what is missing, a documented way to ship a violation anyway, and a human read-out of why the task is believed done.
 
 ## ADDED Requirements
+
+### Requirement: Hand-over boundary
+
+The system SHALL provide `dresscode check` as an explicit gate over the final cumulative diff, not individual commits. The documented workflow SHALL require `AGENTS.md` or the harness to run it successfully before the agent declares the task done. DressCode SHALL NOT install or require Git hooks, and intermediate commits SHALL NOT require current verdicts.
+
+#### Scenario: Intermediate commits without review
+
+- **WHEN** the agent makes multiple intermediate commits while configured entries remain unanswered
+- **THEN** DressCode does not block those commits
+- **AND** an explicit `dresscode check` still exits `1` until the cumulative diff has current passing verdicts or waivers
+
+#### Scenario: Final result is gated
+
+- **WHEN** the agent is ready to hand over the task
+- **THEN** the documented workflow requires `dresscode check` to exit `0` against the complete current diff before declaring the task done
 
 ### Requirement: Green condition
 
@@ -39,7 +54,7 @@ The system SHALL use exit code `0` for green or waived, `1` for action needed, a
 #### Scenario: Usage error is distinguishable
 
 - **WHEN** a command is invoked with an unknown entry id
-- **THEN** it exits `2`, not `1`, so a hook can tell a broken invocation from a failing gate
+- **THEN** it exits `2`, not `1`, so the calling harness can tell a broken invocation from a failing gate
 
 ### Requirement: Waivers
 

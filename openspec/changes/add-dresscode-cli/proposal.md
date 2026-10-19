@@ -22,16 +22,16 @@ implement ──> dresscode list      questions only, expectations sealed
 - `dresscode list` — the applicable questions plus their context command output, never the expectation.
 - `dresscode answer <id> --yes|--no|--n-a --evidence <text>` — records the verdict, then prints the reveal.
 - `dresscode waive <id> --reason <text>` — lets a violation ship, on the record.
-- `dresscode check [--strict]` — the gate for `pre-commit` and for the agent: exit `0` green or waived, `1` action needed with the fixing command named per entry, `2` usage error. `--strict` fails on waivers.
+- `dresscode check [--strict]` — the gate before the agent declares the task done, covering the final cumulative diff rather than intermediate commits: exit `0` green or waived, `1` action needed with the fixing command named per entry, `2` usage error. `--strict` fails on waivers.
 - `dresscode report` — colorful human summary of why the task is believed done, explicitly labeling reviewer freshness `unverified`.
 - `dresscode add`, `dresscode retire <id> [--reason]`, `dresscode reset`, `dresscode trust`.
 - `dresscode diff [--numstat]` — the diff definition as a command, so entries can use it as context; merge base to working tree, untracked included, configured exclusions applied.
-- Every command offering `--json` so a hook, a gate and a subagent can all consume the output.
+- Every command offering `--json` so a harness, a hand-over gate and a subagent can all consume the output.
 - Python and `uv`, installable with `uv tool install .`.
 
 ## Non-goals (v0)
 
-- DressCode never spawns agents, never talks to a model, never edits code. Requiring a fresh-context reviewer is `AGENTS.md`'s or the harness's job; backstopping recorded answers against the current diff is `pre-commit`'s.
+- DressCode never spawns agents, never talks to a model, never edits code. Requiring a fresh-context reviewer and running `dresscode check` before hand-over are `AGENTS.md`'s or the harness's job. DressCode does not install or require Git hooks; intermediate commits remain unrestricted by DressCode.
 - No reviewer-independence enforcement: no attestation handshake, session adapters, implementer tracking, same-session refusal or freshness policies (see `backlog.md`). V0 can accept a self-review; a passing gate is not proof of independent review.
 - No lifecycle automation: entries do not graduate to `ast-grep` on their own and do not decay (see `backlog.md`).
 - No entry scoping by glob or tag; an inapplicable question is answered `n-a`.
@@ -39,4 +39,4 @@ implement ──> dresscode list      questions only, expectations sealed
 
 ## Why a tool and not a markdown checklist
 
-A markdown list cannot seal the wanted answer from the reviewer, cannot bind a verdict to the diff it was given, cannot tell a documented violation from an undocumented one, and cannot gate a commit.
+A markdown list cannot seal the wanted answer from the reviewer, cannot bind a verdict to the diff it was given, cannot tell a documented violation from an undocumented one, and cannot gate hand-over of the final result.

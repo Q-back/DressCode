@@ -1,6 +1,6 @@
 ## Purpose
 
-Define "the change under review" once, so the reviewer, the size question, the gate in `pre-commit` and the gate in CI all mean the same thing, and so a verdict can be bound to the diff it was given.
+Define "the change under review" once, so the reviewer, the size question, the final hand-over gate and any CI invocation all mean the same thing, and so a verdict can be bound to the diff it was given.
 
 ## ADDED Requirements
 
@@ -86,12 +86,17 @@ The system SHALL provide `dresscode diff`, printing the scoped files with added 
 
 ### Requirement: Diff fingerprint
 
-The system SHALL compute a fingerprint of the scoped diff, stable across invocations with an unchanged working tree, changing whenever scoped content changes, and unaffected by excluded paths.
+The system SHALL compute a fingerprint of the scoped diff, stable across invocations with an unchanged working tree, changing whenever scoped content changes, and unaffected by excluded paths. Staging or committing unchanged scoped content SHALL NOT change the fingerprint.
 
 #### Scenario: Stable while nothing changes
 
 - **WHEN** the fingerprint is computed twice with no edits in between
 - **THEN** both values are equal
+
+#### Scenario: Commit boundaries do not change the reviewed result
+
+- **WHEN** reviewed scoped content is staged and committed on the same branch without content changes
+- **THEN** the fingerprint is unchanged
 
 #### Scenario: Scoped edit changes the fingerprint
 
