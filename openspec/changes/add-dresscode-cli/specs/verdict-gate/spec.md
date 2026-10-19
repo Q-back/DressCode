@@ -82,31 +82,31 @@ The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry
 
 ### Requirement: Strict gate
 
-The system SHALL support `dresscode check --strict`, applying all normal gate checks and additionally exiting `1` when the run passes only through waivers, so CI can hold a line the local gate does not. Unverified reviewer freshness SHALL NOT block either mode.
+The system SHALL support `dresscode check --strict`, applying all normal gate checks and additionally exiting `1` when the run passes only through waivers, so CI can hold a line the local gate does not.
 
 #### Scenario: CI rejects a waived run
 
 - **WHEN** a run is `passed-with-waivers` and `check --strict` runs
 - **THEN** it exits `1` and lists the waivers
 
-#### Scenario: Unverified reviewer freshness does not block
+#### Scenario: Strict gate accepts an unwaived run
 
-- **WHEN** every entry has a current matching or `n-a` verdict, no waivers are needed, and reviewer freshness is unverified
+- **WHEN** every entry has a current matching or `n-a` verdict and no waivers are needed
 - **THEN** both `check` and `check --strict` exit `0`
 
 ### Requirement: Human report
 
-The system SHALL provide `dresscode report`, printing a colored summary: overall status, the diff size, reviewer freshness explicitly labeled `unverified`, each entry with its verdict, evidence and reveal, and waivers in their own section. It SHALL NOT claim that a passing gate proves independent review.
+The system SHALL provide `dresscode report`, printing a colored summary: overall status, the diff size, each entry with its verdict, evidence and reveal, and waivers in their own section.
 
 #### Scenario: Report after a green run
 
 - **WHEN** `dresscode report` runs on a green run
-- **THEN** it shows every question with its verdict and evidence, and labels reviewer freshness `unverified`
+- **THEN** it shows every question with its verdict and evidence
 
-#### Scenario: Structured report states the same limitation
+#### Scenario: Structured report
 
 - **WHEN** `dresscode report --json` runs
-- **THEN** the output includes `reviewer_freshness: "unverified"`, regardless of the gate status
+- **THEN** the output includes the overall status, diff size, per-entry verdicts with evidence and reveal, and waivers
 
 #### Scenario: Waivers are visible
 

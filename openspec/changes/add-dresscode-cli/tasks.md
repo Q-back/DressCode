@@ -3,9 +3,9 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 ## 1. Commit: Establish the installable CLI skeleton
 
 - [ ] 1.1 Init a `uv` project: `pyproject.toml` with `requires-python = ">=3.14,<3.15"`, package `dresscode`, entry point `dresscode = "dresscode.cli:main"`, runtime deps `typer` and `rich`, dev deps `pytest`, `ruff`, `ty`, `pre-commit`; `.python-version` pin.
-- [ ] 1.2 Package skeleton `dresscode/{__init__,cli,config,entries,repo,diff,run,gate,report,context}.py`; `cli.py` exposes a `typer` app whose v0 commands exist and exit `2` as unimplemented. No attestation command or harness adapter module.
+- [ ] 1.2 Package skeleton `dresscode/{__init__,cli,config,entries,repo,diff,run,gate,report,context}.py`; `cli.py` exposes a `typer` app whose v0 commands exist and exit `2` as unimplemented.
 - [ ] 1.3 Test scaffolding: `testpaths = ["dresscode"]`, colocated `test_*.py`, a `git_repo` fixture building a real temporary repository with a base branch and a feature branch, and an `xdg_home` fixture pointing `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at a temp dir so no test touches the real store.
-- [ ] 1.4 Test: `dresscode --help` exits `0`, lists every v0 command and does not advertise `attest`; placeholders exit `2`.
+- [ ] 1.4 Test: `dresscode --help` exits `0`, lists every v0 command; placeholders exit `2`.
 - [ ] 1.5 Document installation, `--help` and the currently unavailable commands in the README; keep that status current in each following group.
 
 ## 2. Commit: Configure, author and list sealed questions
@@ -28,22 +28,22 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 - [ ] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint when the merge base is unchanged.
 - [ ] 3.7 Document base resolution, working-tree and untracked scope, exclusions and `diff` output.
 
-## 4. Commit: Record diff-bound verdicts without identity checks
+## 4. Commit: Record diff-bound verdicts
 
-- [ ] 4.1 Implement the run key (repo identity plus branch, `detached-<sha>` fallback) and JSON run state under `$XDG_STATE_HOME/dresscode/runs/`; assert in tests that the repository stays untouched. Do not detect or record implementer or reviewer session identities.
-- [ ] 4.2 Implement `dresscode answer` with required evidence, fingerprint pinning, timestamps, counter updates, reveal in the response, re-answer replacing and history kept; `--n-a` never failing the gate. Accept otherwise valid answers without attestation or session identity.
+- [ ] 4.1 Implement the run key (repo identity plus branch, `detached-<sha>` fallback) and JSON run state under `$XDG_STATE_HOME/dresscode/runs/`; assert in tests that the repository stays untouched.
+- [ ] 4.2 Implement `dresscode answer` with required evidence, fingerprint pinning, timestamps, counter updates, reveal in the response, re-answer replacing and history kept; `--n-a` never failing the gate.
 - [ ] 4.3 Implement staleness against the current fingerprint, and `dresscode reset` clearing the run's verdicts and waivers while preserving counters.
-- [ ] 4.4 Tests: branch switch isolating runs; detached HEAD; first answer accepted without attestation or identity; supplied session environment variables neither recorded nor used to reject answers; reveal returned only after recording; empty evidence and unknown id exiting `2`; re-answer history; `n-a` counters; scoped edit staling a verdict while an excluded edit does not; reset clearing verdicts and keeping counters.
-- [ ] 4.5 Document `list` → `answer`, evidence, reveal, run state, staleness and reset. Require a fresh-context reviewer through `AGENTS.md` or the harness instructions, while stating that the CLI cannot enforce reviewer independence.
+- [ ] 4.4 Tests: branch switch isolating runs; detached HEAD; first answer recorded; reveal returned only after recording; empty evidence and unknown id exiting `2`; re-answer history; `n-a` counters; scoped edit staling a verdict while an excluded edit does not; reset clearing verdicts and keeping counters.
+- [ ] 4.5 Document `list` → `answer`, evidence, reveal, run state, staleness and reset. Document fresh-context review as an `AGENTS.md` or harness instruction.
 
 ## 5. Commit: Gate current verdicts and documented waivers
 
-- [ ] 5.1 Implement `dresscode check`: green condition, blocking states (`unanswered`, `stale`, `context_failed`, `violated`), the fixing command per entry, exit codes `0`/`1`/`2`, and `--json`. Reviewer freshness is not a gate condition.
-- [ ] 5.2 Implement `dresscode waive`: only over a violating current verdict, reason required, reason/timestamp/fingerprint stored without author session identity, status `passed-with-waivers`, staleness like a verdict.
-- [ ] 5.3 Implement `check --strict` applying the normal gate checks and additionally failing on waivers only, not on unverified reviewer freshness.
-- [ ] 5.4 Implement `dresscode report` with `rich`: status, diff size, reviewer freshness explicitly `unverified`, per-entry verdict with evidence and reveal, waivers in their own section, no ANSI when not a TTY; `report --json` includes `reviewer_freshness: "unverified"`.
-- [ ] 5.5 Tests: green run; empty entry list; each blocking state naming its command; usage error exiting `2` while a failing gate exits `1`; waiver flipping the gate and `--strict` flipping it back; waiver over a satisfied entry refused; stale waivers blocking; reset clearing waivers; both gate modes green without waivers despite unverified freshness; report content, JSON limitation and non-TTY plainness.
-- [ ] 5.6 Document `check`, `waive`, `check --strict`, `report` and exit codes. The gate runs before final task hand-over, not before intermediate commits, and does not install or require Git hooks. A green gate means current recorded answers satisfy the entries, not proof of independent review; strict mode adds a no-waiver requirement only.
+- [ ] 5.1 Implement `dresscode check`: green condition, blocking states (`unanswered`, `stale`, `context_failed`, `violated`), the fixing command per entry, exit codes `0`/`1`/`2`, and `--json`.
+- [ ] 5.2 Implement `dresscode waive`: only over a violating current verdict, reason required, reason/timestamp/fingerprint stored, status `passed-with-waivers`, staleness like a verdict.
+- [ ] 5.3 Implement `check --strict` applying the normal gate checks and additionally failing on waivers.
+- [ ] 5.4 Implement `dresscode report` with `rich`: status, diff size, per-entry verdict with evidence and reveal, waivers in their own section, no ANSI when not a TTY; `report --json` includes the same summary.
+- [ ] 5.5 Tests: green run; empty entry list; each blocking state naming its command; usage error exiting `2` while a failing gate exits `1`; waiver flipping the gate and `--strict` flipping it back; waiver over a satisfied entry refused; stale waivers blocking; reset clearing waivers; both gate modes green without waivers; report content, JSON summary and non-TTY plainness.
+- [ ] 5.6 Document `check`, `waive`, `check --strict`, `report` and exit codes. The gate runs before final task hand-over, not before intermediate commits, and does not install or require Git hooks. A green gate means current recorded answers satisfy the entries; strict mode adds a no-waiver requirement.
 
 ## 6. Commit: Supply trusted context evidence end to end
 
@@ -56,8 +56,8 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 
 ## 7. Commit: Verify the full workflow and publish usage
 
-- [ ] 7.1 End-to-end test over a real temporary repository with as few mocks as possible: `check` (red) → two intermediate commits succeeding without answers → `check` still red → `diff` showing both commits → `list` → `answer` for every entry including one violation → `waive` → `check` green with `passed-with-waivers` → `check --strict` red → `report` showing the waiver and reviewer freshness `unverified`; then edit a file and assert both verdicts and waivers go stale.
-- [ ] 7.2 End-to-end test without harness/session environment variables or attestation: the same calling environment runs `check`, `list` and valid matching answers → both `check` and `check --strict` green without waivers → `report --json` showing reviewer freshness `unverified`.
+- [ ] 7.1 End-to-end test over a real temporary repository with as few mocks as possible: `check` (red) → two intermediate commits succeeding without answers → `check` still red → `diff` showing both commits → `list` → `answer` for every entry including one violation → `waive` → `check` green with `passed-with-waivers` → `check --strict` red → `report` showing the waiver; then edit a file and assert both verdicts and waivers go stale.
+- [ ] 7.2 End-to-end test of an unwaived run: `check` (red) → `list` → valid matching and `n-a` answers → both `check` and `check --strict` green → `report --json` showing status, diff size, verdicts with evidence and reveal, and no waivers.
 - [ ] 7.3 `uv tool install .` from the repo, run `dresscode check` in a real project, confirm the store lands under `$XDG_STATE_HOME` and the repository is untouched.
 - [ ] 7.4 Add `.pre-commit-config.yaml` for deterministic development checks (`ruff-format`, `ty`) only; do not add a `dresscode check` hook.
-- [ ] 7.5 Complete the README install and usage sections (`uv tool install .`, `uv tool install --force --refresh .`, `uv run dresscode`), the three configuration layers, an example entry with a context command, the exit-code table and fresh-reviewer harness instructions requiring `dresscode check` before declaring the task done, with intermediate commits unrestricted by DressCode. Remove placeholder notices and make clear that reviewer independence is unverified and `--strict` rejects waivers only.
+- [ ] 7.5 Complete the README install and usage sections (`uv tool install .`, `uv tool install --force --refresh .`, `uv run dresscode`), the three configuration layers, an example entry with a context command, the exit-code table and fresh-reviewer harness instructions requiring `dresscode check` before declaring the task done, with intermediate commits unrestricted by DressCode. Remove placeholder notices, document that passing does not prove independent review, and explain that `--strict` additionally rejects waivers.

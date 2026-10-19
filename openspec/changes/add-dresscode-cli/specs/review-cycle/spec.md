@@ -1,6 +1,6 @@
 ## Purpose
 
-Run one review: identify the run, hand sealed questions to the reviewer, record verdicts against the diff they were given, and expire them when the diff moves. A fresh-context reviewer is required by `AGENTS.md` or the harness instructions; v0 does not verify reviewer independence.
+Run one review: identify the run, hand sealed questions to the reviewer, record verdicts against the diff they were given, and expire them when the diff moves.
 
 ## ADDED Requirements
 
@@ -31,20 +31,6 @@ The system SHALL store run state under `$XDG_STATE_HOME/dresscode/runs/` (defaul
 
 - **WHEN** a full review is recorded
 - **THEN** `git status` in the repository is unchanged
-
-### Requirement: Review without identity checks
-
-The system SHALL accept otherwise valid answers without an attestation handshake or session identity, and SHALL NOT detect or record implementer or reviewer session identities. The CLI does not enforce the workflow's fresh-context reviewer requirement.
-
-#### Scenario: First answer without attestation or identity
-
-- **WHEN** `dresscode list` has been run and the first valid `dresscode answer` is submitted without any attestation or session identity
-- **THEN** the verdict is recorded without a reviewer-independence check
-
-#### Scenario: Same session runs the gate and answers
-
-- **WHEN** the session that ran `dresscode check` submits a valid answer
-- **THEN** the verdict is accepted, without recording a session identity or claiming independent review
 
 ### Requirement: Question delivery
 

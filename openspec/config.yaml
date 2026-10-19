@@ -7,8 +7,8 @@ context: |
   expected or the violation is waived with a reason. Intermediate commits do
   not need to pass DressCode; the gate covers the final cumulative diff, not
   individual commits, and does not require Git hooks. Fresh-context review is
-  required by AGENTS.md or the harness, not verified by the CLI; reviewer
-  freshness is reported as unverified, and check --strict rejects waivers only.
+  required by AGENTS.md or the harness, not verified by the CLI.
+  check --strict additionally rejects waivers.
 
   Implementation: Python with `uv`, `typer` + `rich`, `ruff` + `ty` + `pytest`,
   shaped like the `metronome` CLI. State is a global store keyed by repo and
