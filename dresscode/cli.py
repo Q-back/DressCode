@@ -5,11 +5,28 @@ from typing import Annotated, NoReturn
 
 import typer
 
+from dresscode.repo import Repository, RepositoryError, discover
+
 app = typer.Typer(
     help="Review recurring coding mistakes against the current diff.",
     add_completion=False,
     no_args_is_help=True,
 )
+
+
+def fail(message: str, json_output: bool) -> NoReturn:
+    if json_output:
+        typer.echo(json.dumps({"status": "error", "error": message}))
+    else:
+        typer.echo(message, err=True)
+    raise typer.Exit(code=2)
+
+
+def repository(json_output: bool) -> Repository:
+    try:
+        return discover()
+    except RepositoryError as error:
+        fail(str(error), json_output)
 
 
 def unimplemented(
@@ -18,6 +35,7 @@ def unimplemented(
         bool, typer.Option("--json", help="Emit a single JSON document.")
     ] = False,
 ) -> NoReturn:
+    repository(json_output)
     if json_output:
         typer.echo(json.dumps({"command": ctx.info_name, "status": "unimplemented"}))
     else:

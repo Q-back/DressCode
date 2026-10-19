@@ -42,6 +42,12 @@ uv run dresscode check --json
 
 Do not use `dresscode check` as a hand-over gate until it is implemented.
 
+## Repository identity
+
+Run commands inside a Git work tree. Outside one, commands exit `2` with a clear error (or a JSON error with `--json`); help remains available anywhere.
+
+Repositories are identified by their `origin` URL after removing the scheme, credentials, trailing slash and `.git` suffix. For example, `git@example.com:team/repo.git` and `https://example.com/team/repo` both identify `example.com/team/repo`. With no origin, the identity is the real path of the main worktree. Linked worktrees share that identity, even without a remote. Discovering identity does not write configuration or state.
+
 ## Development
 
 The development interpreter is pinned in `.python-version`. `uv` manages the environment and dependencies:

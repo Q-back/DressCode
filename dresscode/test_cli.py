@@ -61,6 +61,24 @@ def test_command_help_is_available(command: str) -> None:
     assert "--json" in result.stdout
 
 
+@pytest.mark.parametrize("json_output", [False, True])
+def test_command_outside_a_git_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, json_output: bool
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["list", *(["--json"] if json_output else [])])
+
+    assert result.exit_code == 2
+    if json_output:
+        response = json.loads(result.stdout)
+        assert response["status"] == "error"
+        assert "Git work tree" in response["error"]
+        assert result.stderr == ""
+    else:
+        assert result.stdout == ""
+        assert "Git work tree" in result.stderr
+
+
 def test_installed_entry_point_works_outside_the_project(tmp_path: Path) -> None:
     executable = Path(sys.executable).with_name("dresscode")
     result = subprocess.run(

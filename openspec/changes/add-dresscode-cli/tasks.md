@@ -8,11 +8,21 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 - [x] 1.4 Test: `dresscode --help` exits `0`, lists every v0 command; placeholders exit `2`.
 - [x] 1.5 Document installation, `--help` and the currently unavailable commands in the README; keep that status current in each following group.
 
-## 2. Commit: Configure, author and list sealed questions
+## 2. Configure, author and list sealed questions
 
-- [ ] 2.1 Implement `repo.py`: identity from the normalized `origin` URL, fallback to the main worktree realpath, identical from a linked worktree; exit `2` outside a git work tree.
+Ship this section as three sequential commits. Each boundary includes the relevant tests from 2.6, documentation from 2.7, passing checks and independent review. Mark those aggregate tasks complete only when their full scope is implemented.
+
+### 2A. Commit: Resolve repository identity
+
+- [x] 2.1 Implement `repo.py`: identity from the normalized `origin` URL, fallback to the main worktree realpath, identical from a linked worktree; exit `2` outside a git work tree.
+
+### 2B. Commit: Load layered configuration and entries
+
 - [ ] 2.2 Implement `config.py`: load and merge the three layers (private per-repo, repository-local file or directory, global), scalars overriding, missing layers tolerated, invalid TOML exiting `2` with the file named.
 - [ ] 2.3 Implement `entries.py`: entry parsing with required `id`/`question`/`expects`, optional `reveal`/`context`/`enabled`, unknown keys rejected, merge by `id`, `enabled = false` dropping an entry.
+
+### 2C. Commit: Author and list sealed questions
+
 - [ ] 2.4 Implement the counter store in the global store, independent of the configuration layers.
 - [ ] 2.5 Implement `dresscode add --layer`, `dresscode retire <id> --reason` and basic `dresscode list` with `--json`, emitting enabled, non-retired entries as `id` and `question`, never `expects` or `reveal`. Context execution is unavailable until commit group 6.
 - [ ] 2.6 Tests: two clone URL shapes resolving equal; worktree identity; each layer winning in turn using supported settings such as `base_ref`; missing required key and unknown key errors; merge and disable; counters writable with a read-only repository layer; `add` round-tripping into `list`; retired entries absent; no sealed keys in `list --json`.
