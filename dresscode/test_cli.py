@@ -32,6 +32,21 @@ def test_help_lists_every_v0_command() -> None:
         assert command in result.stdout
 
 
+def test_add_help_explains_layers_outside_a_git_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["add", "--help"], color=False)
+
+    assert result.exit_code == 0
+    help_text = " ".join(result.stdout.replace("│", " ").split())
+    assert "repo (shared repository config)" in help_text
+    assert "private (personal overrides for this repository)" in help_text
+    assert "global (defaults for all repositories)" in help_text
+    assert "[default: repo]" in help_text
+    assert set(tmp_path.iterdir()) == {tmp_path / "config", tmp_path / "state"}
+
+
 @pytest.mark.parametrize("command", PLACEHOLDERS)
 def test_placeholders_are_explicitly_unimplemented(command: str) -> None:
     result = runner.invoke(app, [command])

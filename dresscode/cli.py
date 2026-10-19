@@ -65,7 +65,13 @@ def add(
     ],
     reveal: str = "",
     context: str | None = None,
-    layer: str = "repo",
+    layer: Annotated[
+        str,
+        typer.Option(
+            help="Write to: repo (shared repository config), private (personal "
+            "overrides for this repository), or global (defaults for all repositories)."
+        ),
+    ] = "repo",
     json_output: JsonOutput = False,
 ) -> None:
     config = configuration(json_output)
