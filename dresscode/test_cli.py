@@ -1,0 +1,76 @@
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
+
+from dresscode.cli import app
+
+COMMANDS = (
+    "add",
+    "answer",
+    "check",
+    "diff",
+    "list",
+    "report",
+    "reset",
+    "retire",
+    "trust",
+    "waive",
+)
+runner = CliRunner()
+
+
+def test_help_lists_every_v0_command() -> None:
+    result = runner.invoke(app, ["--help"])
+
+    assert result.exit_code == 0
+    for command in COMMANDS:
+        assert command in result.stdout
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_placeholders_are_explicitly_unimplemented(command: str) -> None:
+    result = runner.invoke(app, [command])
+
+    assert result.exit_code == 2
+    assert result.stdout == ""
+    assert f"dresscode {command}" in result.stderr
+    assert "not implemented" in result.stderr
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_placeholder_json_is_a_single_document(command: str) -> None:
+    result = runner.invoke(app, [command, "--json"])
+
+    assert result.exit_code == 2
+    assert result.stderr == ""
+    assert json.loads(result.stdout) == {
+        "command": command,
+        "status": "unimplemented",
+    }
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_command_help_is_available(command: str) -> None:
+    result = runner.invoke(app, [command, "--help"])
+
+    assert result.exit_code == 0
+    assert "--json" in result.stdout
+
+
+def test_installed_entry_point_works_outside_the_project(tmp_path: Path) -> None:
+    executable = Path(sys.executable).with_name("dresscode")
+    result = subprocess.run(
+        [str(executable), "--help"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    for command in COMMANDS:
+        assert command in result.stdout

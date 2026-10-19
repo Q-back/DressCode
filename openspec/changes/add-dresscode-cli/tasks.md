@@ -2,11 +2,11 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 
 ## 1. Commit: Establish the installable CLI skeleton
 
-- [ ] 1.1 Init a `uv` project: `pyproject.toml` with `requires-python = ">=3.14,<3.15"`, package `dresscode`, entry point `dresscode = "dresscode.cli:main"`, runtime deps `typer` and `rich`, dev deps `pytest`, `ruff`, `ty`, `pre-commit`; `.python-version` pin.
-- [ ] 1.2 Package skeleton `dresscode/{__init__,cli,config,entries,repo,diff,run,gate,report,context}.py`; `cli.py` exposes a `typer` app whose v0 commands exist and exit `2` as unimplemented.
-- [ ] 1.3 Test scaffolding: `testpaths = ["dresscode"]`, colocated `test_*.py`, a `git_repo` fixture building a real temporary repository with a base branch and a feature branch, and an `xdg_home` fixture pointing `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at a temp dir so no test touches the real store.
-- [ ] 1.4 Test: `dresscode --help` exits `0`, lists every v0 command; placeholders exit `2`.
-- [ ] 1.5 Document installation, `--help` and the currently unavailable commands in the README; keep that status current in each following group.
+- [x] 1.1 Init a `uv` project: `pyproject.toml` with `requires-python = ">=3.14,<3.15"`, package `dresscode`, entry point `dresscode = "dresscode.cli:main"`, runtime deps `typer` and `rich`, dev deps `pytest`, `ruff`, `ty`, `pre-commit`; `.python-version` pin.
+- [x] 1.2 Package skeleton `dresscode/{__init__,cli,config,entries,repo,diff,run,gate,report,context}.py`; `cli.py` exposes a `typer` app whose v0 commands exist and exit `2` as unimplemented.
+- [x] 1.3 Test scaffolding: `testpaths = ["dresscode"]`, colocated `test_*.py`, a `git_repo` fixture building a real temporary repository with a base branch and a feature branch, and an `xdg_home` fixture pointing `XDG_STATE_HOME`/`XDG_CONFIG_HOME` at a temp dir so no test touches the real store.
+- [x] 1.4 Test: `dresscode --help` exits `0`, lists every v0 command; placeholders exit `2`.
+- [x] 1.5 Document installation, `--help` and the currently unavailable commands in the README; keep that status current in each following group.
 
 ## 2. Commit: Configure, author and list sealed questions
 

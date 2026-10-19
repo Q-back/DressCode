@@ -2,9 +2,61 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-Status: design only, nothing implemented yet; the shape lives in `openspec/changes/add-dresscode-cli/`. Planned as a Python CLI installed with `uv tool install .`.
+**Status:** installable CLI skeleton. Help works, but all review and entry commands are unavailable and exit `2`. No configuration or review state is read or written yet. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
 
-## Boundaries
+## Installation
+
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.14. From this checkout:
+
+```sh
+uv tool install .
+dresscode --help
+```
+
+Ensure uv's tool binary directory is on your `PATH` (`uv tool update-shell` can set it up). To reinstall after updating the checkout:
+
+```sh
+uv tool install --force --refresh .
+```
+
+Without a tool installation, run from the checkout:
+
+```sh
+uv run dresscode --help
+```
+
+## Command availability
+
+The following commands are placeholders, not a working review workflow:
+
+```text
+add  answer  check  diff  list  report  reset  retire  trust  waive
+```
+
+Each supports `--help` (exit `0`) and `--json`; command-specific arguments and review behavior are not implemented. A bare command prints an unavailable message to stderr and exits `2`. With `--json`, it emits a single JSON document on stdout instead, still exiting `2`:
+
+```sh
+uv run dresscode check --json
+# {"command": "check", "status": "unimplemented"}
+```
+
+Do not use `dresscode check` as a hand-over gate until it is implemented.
+
+## Development
+
+The development interpreter is pinned in `.python-version`. `uv` manages the environment and dependencies:
+
+```sh
+uv sync
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run ty check
+```
+
+Tests live alongside the package modules. Each test gets temporary XDG config and state directories; Git tests use a real temporary repository, not the checkout.
+
+## Planned behavior and boundaries
 
 DressCode is a pure CLI over a state store plus git. It never spawns agents, never calls a model, never edits code.
 
