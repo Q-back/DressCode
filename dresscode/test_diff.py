@@ -241,6 +241,30 @@ def test_deletion_rename_and_filemode_changes(git_repo: Path) -> None:
     assert result.fingerprint != scope(git_repo).fingerprint
 
 
+@pytest.mark.parametrize("mode", [0o644, 0o645, 0o654, 0o744, 0o755])
+def test_untracked_mode_matches_gits_owner_execute_bit(
+    git_repo: Path, mode: int
+) -> None:
+    path = git_repo / "new.txt"
+    path.write_text("new\n")
+    path.chmod(mode)
+    before = scope(git_repo)
+    git(git_repo, "add", "new.txt")
+    assert scope(git_repo) == before
+
+
+@pytest.mark.parametrize("mode", [0o645, 0o654])
+def test_index_removal_ignores_nonowner_execute_bits(git_repo: Path, mode: int) -> None:
+    git(git_repo, "config", "core.filemode", "false")
+    (git_repo / "README.md").chmod(mode)
+    before = scope(git_repo)
+    assert before.files == ()
+    git(git_repo, "rm", "--cached", "README.md")
+    assert scope(git_repo) == before
+    git(git_repo, "add", "README.md")
+    assert scope(git_repo) == before
+
+
 @pytest.mark.parametrize("content", [b"", b"text\r\n", b"\x00binary"])
 def test_new_content_has_stable_counts_and_fingerprint_when_staged(
     git_repo: Path, content: bytes

@@ -148,7 +148,7 @@ def _include_untracked(
             "120000"
             if stat.S_ISLNK(mode)
             else "100755"
-            if executable_bits and mode & 0o111
+            if executable_bits and mode & stat.S_IXUSR
             else "100644"
         )
         old_mode, old_oid, _ = metadata.get(path, ("000000", "", "000000"))
@@ -159,7 +159,7 @@ def _include_untracked(
             and stat.S_ISREG(mode)
         ):
             git_mode = old_mode
-            comparison_mode = 0o755 if mode & 0o111 else 0o644
+            comparison_mode = 0o755 if mode & stat.S_IXUSR else 0o644
         counts = _untracked_numstat(root, path, old_mode, old_oid, comparison_mode)
         if path in metadata:
             files[:] = [file for file in files if file.path != path]
