@@ -86,7 +86,7 @@ The system SHALL provide `dresscode diff`, printing the scoped files with added 
 
 ### Requirement: Diff fingerprint
 
-The system SHALL compute a fingerprint of the scoped diff, stable across invocations with an unchanged working tree, changing whenever scoped content changes, and unaffected by excluded paths. Staging or committing unchanged scoped content SHALL NOT change the fingerprint.
+The system SHALL compute a fingerprint of the scoped diff, stable across invocations with an unchanged working tree, changing whenever scoped content changes, and unaffected by excluded paths. With an unchanged merge base, staging or committing unchanged scoped content SHALL NOT change the fingerprint.
 
 #### Scenario: Stable while nothing changes
 
@@ -95,7 +95,7 @@ The system SHALL compute a fingerprint of the scoped diff, stable across invocat
 
 #### Scenario: Commit boundaries do not change the reviewed result
 
-- **WHEN** reviewed scoped content is staged and committed on the same branch without content changes
+- **WHEN** reviewed scoped content is staged and committed on the same branch without content changes or a change to the merge base
 - **THEN** the fingerprint is unchanged
 
 #### Scenario: Scoped edit changes the fingerprint

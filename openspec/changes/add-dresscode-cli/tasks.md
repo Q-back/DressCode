@@ -25,7 +25,7 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 - [ ] 3.3 Implement `diff.exclude` with the documented defaults, applied to listing and counting.
 - [ ] 3.4 Implement the fingerprint over scoped content: stable when nothing changes, different after a scoped edit, unchanged by an excluded edit.
 - [ ] 3.5 Implement `dresscode diff` with `--numstat` and `--json`.
-- [ ] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint.
+- [ ] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint when the merge base is unchanged.
 - [ ] 3.7 Document base resolution, working-tree and untracked scope, exclusions and `diff` output.
 
 ## 4. Commit: Record diff-bound verdicts without identity checks
@@ -56,7 +56,7 @@ Each section is an ordered, commit-sized outcome. Finish its implementation, tes
 
 ## 7. Commit: Verify the full workflow and publish usage
 
-- [ ] 7.1 End-to-end test over a real temporary repository with as few mocks as possible: `check` (red) → two intermediate commits succeeding without answers → `check` still red → `list` covering the cumulative diff → `answer` for every entry including one violation → `waive` → `check` green with `passed-with-waivers` → `check --strict` red → `report` showing the waiver and reviewer freshness `unverified`; then edit a file and assert both verdicts and waivers go stale.
+- [ ] 7.1 End-to-end test over a real temporary repository with as few mocks as possible: `check` (red) → two intermediate commits succeeding without answers → `check` still red → `diff` showing both commits → `list` → `answer` for every entry including one violation → `waive` → `check` green with `passed-with-waivers` → `check --strict` red → `report` showing the waiver and reviewer freshness `unverified`; then edit a file and assert both verdicts and waivers go stale.
 - [ ] 7.2 End-to-end test without harness/session environment variables or attestation: the same calling environment runs `check`, `list` and valid matching answers → both `check` and `check --strict` green without waivers → `report --json` showing reviewer freshness `unverified`.
 - [ ] 7.3 `uv tool install .` from the repo, run `dresscode check` in a real project, confirm the store lands under `$XDG_STATE_HOME` and the repository is untouched.
 - [ ] 7.4 Add `.pre-commit-config.yaml` for deterministic development checks (`ruff-format`, `ty`) only; do not add a `dresscode check` hook.
