@@ -1,12 +1,14 @@
 """Command-line interface for DressCode."""
 
 import json
+from dataclasses import asdict
 from typing import Annotated, NoReturn
 
 import typer
 
 from dresscode.authoring import append_entry
 from dresscode.config import Configuration, ConfigurationError, load
+from dresscode.diff import DiffError, collect
 from dresscode.entries import Entry
 from dresscode.repo import Repository, RepositoryError, discover
 from dresscode.store import EntryStore, StoreError
@@ -130,10 +132,45 @@ def list_entries(json_output: JsonOutput = False) -> None:
     )
 
 
+@app.command("diff", help="Show the scoped change under review.")
+def show_diff(
+    numstat: Annotated[
+        bool, typer.Option(help="Emit tab-separated counts and paths.")
+    ] = False,
+    json_output: JsonOutput = False,
+) -> None:
+    config = configuration(json_output)
+    try:
+        scoped = collect(config)
+    except DiffError as error:
+        fail(str(error), json_output)
+    if json_output:
+        typer.echo(
+            json.dumps(
+                {
+                    **asdict(scoped),
+                    "totals": {"added": scoped.added, "removed": scoped.removed},
+                }
+            )
+        )
+        return
+    typer.echo(f"Base: {scoped.base_ref} (merge base {scoped.merge_base})", err=numstat)
+    if not numstat:
+        typer.echo("Added\tRemoved\tPath")
+    for file in scoped.files:
+        path = (
+            json.dumps(file.path)
+            if any(character in file.path for character in '\t\n\r"\\')
+            else file.path
+        )
+        counts = "-\t-" if file.added is None else f"{file.added}\t{file.removed}"
+        typer.echo(f"{counts}\t{path}")
+    typer.echo(f"{scoped.added}\t{scoped.removed}\tTOTAL")
+
+
 for name, description in {
     "answer": "Record a verdict with evidence.",
     "check": "Check whether the review passes.",
-    "diff": "Show the scoped change under review.",
     "report": "Summarize the review.",
     "reset": "Clear the current review.",
     "trust": "Trust repository-local context commands.",

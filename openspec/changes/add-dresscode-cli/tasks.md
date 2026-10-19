@@ -30,13 +30,13 @@ Ship this section as three sequential commits. Each boundary includes the releva
 
 ## 3. Commit: Define and fingerprint the current diff
 
-- [ ] 3.1 Implement base ref resolution with the configured → `origin/HEAD` → `main`/`master` → root commit chain, reporting the resolved base.
-- [ ] 3.2 Implement the scoped diff: `git diff --merge-base <base>` against the working tree, plus untracked non-ignored files as additions.
-- [ ] 3.3 Implement `diff.exclude` with the documented defaults, applied to listing and counting.
-- [ ] 3.4 Implement the fingerprint over scoped content: stable when nothing changes, different after a scoped edit, unchanged by an excluded edit.
-- [ ] 3.5 Implement `dresscode diff` with `--numstat` and `--json`.
-- [ ] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint when the merge base is unchanged.
-- [ ] 3.7 Document base resolution, working-tree and untracked scope, exclusions and `diff` output.
+- [x] 3.1 Implement base ref resolution with the configured → `origin/HEAD` → `main`/`master` → root commit chain, reporting the resolved base.
+- [x] 3.2 Implement the scoped diff: `git diff --merge-base <base>` against the working tree, plus untracked non-ignored files as additions.
+- [x] 3.3 Implement `diff.exclude` with the documented defaults, applied to listing and counting.
+- [x] 3.4 Implement the fingerprint over scoped content: stable when nothing changes, different after a scoped edit, unchanged by an excluded edit.
+- [x] 3.5 Implement `dresscode diff` with `--numstat` and `--json`.
+- [x] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint when the merge base is unchanged.
+- [x] 3.7 Document base resolution, working-tree and untracked scope, exclusions and `diff` output.
 
 ## 4. Commit: Record diff-bound verdicts
 

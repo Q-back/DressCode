@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** configuration, entry authoring, retirement and sealed question listing work. Review answers, diff inspection and the hand-over gate remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
+**Status:** configuration, entry authoring, retirement, sealed question listing and scoped diff inspection work. Review answers and the hand-over gate remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
 
 ## Installation
 
@@ -29,8 +29,8 @@ uv run dresscode --help
 
 | Commands | Availability |
 |---|---|
-| `add`, `retire`, `list` | Available; success exits `0`, errors exit `2` |
-| `answer`, `check`, `diff`, `report`, `reset`, `trust`, `waive` | Unavailable placeholders; exit `2` |
+| `add`, `retire`, `list`, `diff` | Available; success exits `0`, errors exit `2` |
+| `answer`, `check`, `report`, `reset`, `trust`, `waive` | Unavailable placeholders; exit `2` |
 
 Every command supports `--help` (exit `0`) and `--json`. Placeholders validate the repository and configuration, then print an unavailable message to stderr and exit `2`. With `--json`, they emit a single JSON document on stdout instead, still exiting `2`:
 
@@ -99,6 +99,57 @@ uv run dresscode retire test-factory --reason "now an ast-grep rule"
 `retire <id> [--reason <text>]` removes an entry from future listings for this repository, across branches and linked worktrees. The reason is optional and defaults to empty. Retirement preserves the entry snapshot, reason and timestamp in `$XDG_STATE_HOME/dresscode/entries.sqlite3` (default state home: `~/.local/state`). Existing counters are kept, and configuration files are not modified. Unknown or already-retired IDs exit `2`.
 
 The same SQLite store holds per-repository, per-entry counters: `asked`, `violated`, `n_a` and `last_violated`. Counter writes are independent of configuration permissions. Retirement history is readable in the `retired` table; its `entry` column contains the original entry as JSON. The `answer` command is not available yet, so no CLI verdict updates these counters yet.
+
+## Inspect the current diff
+
+```sh
+dresscode diff
+dresscode diff --numstat
+dresscode diff --json
+```
+
+The scope is the merge base of `HEAD` and the resolved base compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
+
+Base resolution uses the first available candidate:
+
+```text
+configured base_ref → origin/HEAD → local main → local master → root commit
+```
+
+An explicit `base_ref` must resolve to a commit; an invalid value exits `2` rather than silently choosing another base. A repository with no commits also exits `2`. The output reports both the selected ref (a commit ID for the root fallback) and the actual merge-base commit ID.
+
+### Exclusions
+
+`diff.exclude` is a list of Git pathspecs, applied to both tracked and untracked files, listing and counts. An explicit list **replaces** the defaults; `exclude = []` includes everything in scope. For example:
+
+```toml
+[diff]
+exclude = ["*.lock", ":(glob)**/generated/**"]
+```
+
+The default pathspecs are:
+
+| Category | Pathspecs |
+|---|---|
+| Lockfiles | `:(glob)**/*.lock`, `:(glob)**/*-lock.json`, `:(glob)**/npm-shrinkwrap.json`, `:(glob)**/go.sum`, `:(glob)**/packages.lock.json` |
+| Vendored code | `:(glob)**/vendor/**` |
+| Snapshots | `:(glob)**/snapshots/**`, `:(glob)**/__snapshots__/**` |
+| Cassettes and fixtures | `:(glob)**/cassettes/**`, `:(glob)**/fixtures/**` |
+
+### Output and fingerprints
+
+Text output lists added lines, removed lines and each path, followed by totals. `--numstat` omits the column header and sends the base description to stderr, leaving tab-separated rows on stdout with totals last:
+
+```text
+2       0       src/new.py
+2       0       TOTAL
+```
+
+Binary files use `-` for both counts and do not contribute to line totals. Paths containing tabs, newlines, quotes or backslashes are JSON-quoted so each file stays on one output line. Renames are shown as a deletion plus an addition, so moving unchanged content into scope still counts its added lines. Counts never subtract deletions from additions, and DressCode has no built-in size threshold.
+
+`--json` emits one document with `base_ref`, `merge_base`, `fingerprint`, `files` (`path`, `added`, `removed`) and `totals` (`added`, `removed`). Binary file counts are `null`. JSON takes precedence if combined with `--numstat`; successful output has no stderr text. An empty diff succeeds with an empty file list and zero totals.
+
+The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and current content (symlinks use the link text, not the target). It stays stable across repeated reads and excluded edits. Staging or committing unchanged scoped content also preserves it when the merge base is unchanged. A scoped content edit changes it even if the line counts stay the same. This is the value used to bind review answers to the reviewed changes.
 
 ## Development
 

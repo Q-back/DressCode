@@ -20,7 +20,9 @@ COMMANDS = (
     "trust",
     "waive",
 )
-PLACEHOLDERS = tuple(name for name in COMMANDS if name not in {"add", "list", "retire"})
+PLACEHOLDERS = tuple(
+    name for name in COMMANDS if name not in {"add", "diff", "list", "retire"}
+)
 runner = CliRunner()
 
 
