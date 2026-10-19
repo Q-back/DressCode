@@ -18,8 +18,8 @@ Ship this section as three sequential commits. Each boundary includes the releva
 
 ### 2B. Commit: Load layered configuration and entries
 
-- [ ] 2.2 Implement `config.py`: load and merge the three layers (private per-repo, repository-local file or directory, global), scalars overriding, missing layers tolerated, invalid TOML exiting `2` with the file named.
-- [ ] 2.3 Implement `entries.py`: entry parsing with required `id`/`question`/`expects`, optional `reveal`/`context`/`enabled`, unknown keys rejected, merge by `id`, `enabled = false` dropping an entry.
+- [x] 2.2 Implement `config.py`: load and merge the three layers (private per-repo, repository-local file or directory, global), scalars overriding, missing layers tolerated, invalid TOML exiting `2` with the file named.
+- [x] 2.3 Implement `entries.py`: entry parsing with required `id`/`question`/`expects`, optional `reveal`/`context`/`enabled`, unknown keys rejected, merge by `id`, `enabled = false` dropping an entry.
 
 ### 2C. Commit: Author and list sealed questions
 

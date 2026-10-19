@@ -5,6 +5,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
+from dresscode.config import Configuration, ConfigurationError, load
 from dresscode.repo import Repository, RepositoryError, discover
 
 app = typer.Typer(
@@ -29,13 +30,20 @@ def repository(json_output: bool) -> Repository:
         fail(str(error), json_output)
 
 
+def configuration(json_output: bool) -> Configuration:
+    try:
+        return load(repository(json_output))
+    except ConfigurationError as error:
+        fail(str(error), json_output)
+
+
 def unimplemented(
     ctx: typer.Context,
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit a single JSON document.")
     ] = False,
 ) -> NoReturn:
-    repository(json_output)
+    configuration(json_output)
     if json_output:
         typer.echo(json.dumps({"command": ctx.info_name, "status": "unimplemented"}))
     else:

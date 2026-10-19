@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** installable CLI skeleton. Help works, but all review and entry commands are unavailable and exit `2`. No configuration or review state is read or written yet. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
+**Status:** help, repository discovery and configuration validation work. All review and entry commands remain unavailable and exit `2`. Configuration is read but not written; no review state is read or written. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
 
 ## Installation
 
@@ -33,7 +33,7 @@ The following commands are placeholders, not a working review workflow:
 add  answer  check  diff  list  report  reset  retire  trust  waive
 ```
 
-Each supports `--help` (exit `0`) and `--json`; command-specific arguments and review behavior are not implemented. A bare command prints an unavailable message to stderr and exits `2`. With `--json`, it emits a single JSON document on stdout instead, still exiting `2`:
+Each supports `--help` (exit `0`) and `--json`; command-specific arguments and review behavior are not implemented. A bare command validates the repository and configuration, then prints an unavailable message to stderr and exits `2`. With `--json`, it emits a single JSON document on stdout instead, still exiting `2`:
 
 ```sh
 uv run dresscode check --json
@@ -47,6 +47,36 @@ Do not use `dresscode check` as a hand-over gate until it is implemented.
 Run commands inside a Git work tree. Outside one, commands exit `2` with a clear error (or a JSON error with `--json`); help remains available anywhere.
 
 Repositories are identified by their `origin` URL from the shared clone configuration (worktree-specific overrides do not change identity), after removing the scheme, credentials, trailing slash and `.git` suffix. For example, `git@example.com:team/repo.git` and `https://example.com/team/repo` both identify `example.com/team/repo`. With no origin, the identity is the real path of the main worktree. Linked worktrees share that identity, even without a remote. Discovering identity does not write configuration or state.
+
+## Configuration
+
+Configuration is optional and read from lowest to highest priority:
+
+| Priority | Location |
+|---|---|
+| Global defaults | `$XDG_CONFIG_HOME/dresscode/config.toml` |
+| Repository | `.dresscode/*.toml` in filename order, or `.dresscode.toml` if `.dresscode/` is absent |
+| Private per-repository overrides | `$XDG_CONFIG_HOME/dresscode/repos/<encoded-repo-id>.toml` |
+
+`XDG_CONFIG_HOME` defaults to `~/.config`. The private filename is the repository identity percent-encoded as one filename: `example.com/team/repo` becomes `example.com%2Fteam%2Frepo.toml`. Local-path fallback identities are encoded too, so private files cannot escape the configuration directory.
+
+Higher layers replace scalar settings and lists; settings tables merge recursively. For example, private `base_ref = "origin/develop"` replaces repository `base_ref = "origin/main"`. Missing layers are ignored. Invalid TOML and invalid entries exit `2` with the source file named, including with `--json`.
+
+Entries use TOML arrays of tables:
+
+```toml
+base_ref = "origin/main"
+
+[[entries]]
+id = "test-factory"
+question = "Did you reuse an existing test factory?"
+expects = true
+reveal = "Prefer the existing factory over a hand-rolled mock."
+```
+
+`id` and `question` must be strings and `expects` must be boolean. Optional fields are `reveal` (string, default empty), `context` (shell-command string) and `enabled` (boolean, default true). Unknown entry keys are rejected. Entries merge by `id`: a higher layer can supply only the fields it overrides, preserving the rest. Setting `enabled = false` removes an entry from the effective list.
+
+**Context commands are stored as text only and are not executed.** Authoring and sealed listing are still unavailable; do not use the placeholder commands as a review workflow.
 
 ## Development
 
