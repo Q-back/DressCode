@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** help, repository discovery and configuration validation work. All review and entry commands remain unavailable and exit `2`. Configuration is read but not written; no review state is read or written. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
+**Status:** configuration, entry authoring, retirement and sealed question listing work. Review answers, diff inspection and the hand-over gate remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
 
 ## Installation
 
@@ -27,13 +27,12 @@ uv run dresscode --help
 
 ## Command availability
 
-The following commands are placeholders, not a working review workflow:
+| Commands | Availability |
+|---|---|
+| `add`, `retire`, `list` | Available; success exits `0`, errors exit `2` |
+| `answer`, `check`, `diff`, `report`, `reset`, `trust`, `waive` | Unavailable placeholders; exit `2` |
 
-```text
-add  answer  check  diff  list  report  reset  retire  trust  waive
-```
-
-Each supports `--help` (exit `0`) and `--json`; command-specific arguments and review behavior are not implemented. A bare command validates the repository and configuration, then prints an unavailable message to stderr and exits `2`. With `--json`, it emits a single JSON document on stdout instead, still exiting `2`:
+Every command supports `--help` (exit `0`) and `--json`. Placeholders validate the repository and configuration, then print an unavailable message to stderr and exit `2`. With `--json`, they emit a single JSON document on stdout instead, still exiting `2`:
 
 ```sh
 uv run dresscode check --json
@@ -76,7 +75,30 @@ reveal = "Prefer the existing factory over a hand-rolled mock."
 
 `id` and `question` must be strings and `expects` must be boolean. Optional fields are `reveal` (string, default empty), `context` (shell-command string) and `enabled` (boolean, default true). Unknown entry keys are rejected. Entries merge by `id`: a higher layer can supply only the fields it overrides, preserving the rest. Setting `enabled = false` removes an entry from the effective list.
 
-**Context commands are stored as text only and are not executed.** Authoring and sealed listing are still unavailable; do not use the placeholder commands as a review workflow.
+**Context commands are stored as text only and are not executed**, including during listing. `trust` is also unavailable.
+
+## Author and list questions
+
+From the target repository:
+
+```sh
+uv run dresscode add test-factory \
+  --question "Did you reuse an existing test factory?" \
+  --expects true \
+  --reveal "Prefer the existing factory over a hand-rolled mock."
+uv run dresscode list
+uv run dresscode list --json
+# {"entries": [{"id": "test-factory", "question": "Did you reuse an existing test factory?"}]}
+uv run dresscode retire test-factory --reason "now an ast-grep rule"
+```
+
+`add <id>` requires `--question` and `--expects true|false`. Optional flags are `--reveal`, `--context`, `--layer repo|private|global` (default `repo`) and `--json`. It appends a definition without dropping comments or unrelated TOML settings. With `.dresscode/`, it uses the last existing TOML file in filename order, or `rules.toml` if the directory is empty. Otherwise it writes `.dresscode.toml`. Global and private destinations are the files in the configuration table above. Layer precedence still applies to repeated IDs.
+
+`list` emits only enabled, non-retired entries as `id` and `question`, in both text and JSON. It never exposes `expects` or `reveal`, never runs context commands and does not increment counters. An empty list is successful; `--json` returns `{"entries": []}`. Reading an empty store creates no state files.
+
+`retire <id> [--reason <text>]` removes an entry from future listings for this repository, across branches and linked worktrees. The reason is optional and defaults to empty. Retirement preserves the entry snapshot, reason and timestamp in `$XDG_STATE_HOME/dresscode/entries.sqlite3` (default state home: `~/.local/state`). Existing counters are kept, and configuration files are not modified. Unknown or already-retired IDs exit `2`.
+
+The same SQLite store holds per-repository, per-entry counters: `asked`, `violated`, `n_a` and `last_violated`. Counter writes are independent of configuration permissions. Retirement history is readable in the `retired` table; its `entry` column contains the original entry as JSON. The `answer` command is not available yet, so no CLI verdict updates these counters yet.
 
 ## Development
 

@@ -20,6 +20,7 @@ COMMANDS = (
     "trust",
     "waive",
 )
+PLACEHOLDERS = tuple(name for name in COMMANDS if name not in {"add", "list", "retire"})
 runner = CliRunner()
 
 
@@ -31,7 +32,7 @@ def test_help_lists_every_v0_command() -> None:
         assert command in result.stdout
 
 
-@pytest.mark.parametrize("command", COMMANDS)
+@pytest.mark.parametrize("command", PLACEHOLDERS)
 def test_placeholders_are_explicitly_unimplemented(command: str) -> None:
     result = runner.invoke(app, [command])
 
@@ -41,7 +42,7 @@ def test_placeholders_are_explicitly_unimplemented(command: str) -> None:
     assert "not implemented" in result.stderr
 
 
-@pytest.mark.parametrize("command", COMMANDS)
+@pytest.mark.parametrize("command", PLACEHOLDERS)
 def test_placeholder_json_is_a_single_document(command: str) -> None:
     result = runner.invoke(app, [command, "--json"])
 

@@ -23,10 +23,10 @@ Ship this section as three sequential commits. Each boundary includes the releva
 
 ### 2C. Commit: Author and list sealed questions
 
-- [ ] 2.4 Implement the counter store in the global store, independent of the configuration layers.
-- [ ] 2.5 Implement `dresscode add --layer`, `dresscode retire <id> --reason` and basic `dresscode list` with `--json`, emitting enabled, non-retired entries as `id` and `question`, never `expects` or `reveal`. Context execution is unavailable until commit group 6.
-- [ ] 2.6 Tests: two clone URL shapes resolving equal; worktree identity; each layer winning in turn using supported settings such as `base_ref`; missing required key and unknown key errors; merge and disable; counters writable with a read-only repository layer; `add` round-tripping into `list`; retired entries absent; no sealed keys in `list --json`.
-- [ ] 2.7 Document the three configuration layers, entry fields, authoring commands and sealed listing; note that context commands are not executed yet.
+- [x] 2.4 Implement the counter store in the global store, independent of the configuration layers.
+- [x] 2.5 Implement `dresscode add --layer`, `dresscode retire <id> --reason` and basic `dresscode list` with `--json`, emitting enabled, non-retired entries as `id` and `question`, never `expects` or `reveal`. Context execution is unavailable until commit group 6.
+- [x] 2.6 Tests: two clone URL shapes resolving equal; worktree identity; each layer winning in turn using supported settings such as `base_ref`; missing required key and unknown key errors; merge and disable; counters writable with a read-only repository layer; `add` round-tripping into `list`; retired entries absent; no sealed keys in `list --json`.
+- [x] 2.7 Document the three configuration layers, entry fields, authoring commands and sealed listing; note that context commands are not executed yet.
 
 ## 3. Commit: Define and fingerprint the current diff
 
