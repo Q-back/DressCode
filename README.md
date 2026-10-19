@@ -114,6 +114,8 @@ uv run ty check
 
 Tests live alongside the package modules. Each test gets temporary XDG config and state directories; Git tests use a real temporary repository, not the checkout.
 
+GitHub Actions runs these checks on Ubuntu for every push and pull request, using the Python version in `.python-version` and locked dependencies from `uv.lock`. You can also start the `CI` workflow manually from the Actions tab. To block merges when checks fail, require `Python checks` in the branch protection rule or ruleset for your default branch.
+
 ## Planned behavior and boundaries
 
 DressCode is a pure CLI over a state store plus git. It never spawns agents, never calls a model, never edits code.
