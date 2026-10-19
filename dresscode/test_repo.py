@@ -98,6 +98,34 @@ def test_worktree_origin_override_does_not_split_clone_identity(
     )
 
 
+def test_origin_in_shared_include_is_used(git_repo: Path) -> None:
+    included = git_repo / ".git" / "origin.inc"
+    included.write_text('[remote "origin"]\n    url = git@example.com:team/repo.git\n')
+    subprocess.run(
+        ["git", "config", "include.path", "origin.inc"], cwd=git_repo, check=True
+    )
+
+    assert discover(git_repo).identity == "example.com/team/repo"
+
+
+def test_conditional_include_uses_canonical_main_worktree_context(
+    git_repo: Path, tmp_path: Path
+) -> None:
+    included = git_repo / ".git" / "origin.inc"
+    included.write_text('[remote "origin"]\n    url = git@example.com:team/repo.git\n')
+    linked = tmp_path / "linked"
+    for arguments in (
+        ("config", "includeIf.onbranch:feature/test.path", "origin.inc"),
+        ("worktree", "add", str(linked), "-b", "linked"),
+    ):
+        subprocess.run(
+            ["git", *arguments], cwd=git_repo, check=True, capture_output=True
+        )
+
+    assert discover(git_repo).identity == "example.com/team/repo"
+    assert discover(linked).identity == "example.com/team/repo"
+
+
 def test_no_origin_uses_main_worktree_realpath(git_repo: Path, tmp_path: Path) -> None:
     alias = tmp_path / "alias"
     alias.symlink_to(git_repo, target_is_directory=True)

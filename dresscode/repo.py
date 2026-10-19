@@ -21,8 +21,19 @@ def discover(directory: Path | None = None) -> Repository:
     directory = directory or Path.cwd()
     try:
         root = Path(_git(directory, "rev-parse", "--show-toplevel")).resolve()
+        first_record = _git(root, "worktree", "list", "--porcelain", "-z")
+        main_worktree = Path(
+            first_record.split("\0", 1)[0].removeprefix("worktree ")
+        ).resolve()
         try:
-            origin = _git(root, "config", "--local", "--get", "remote.origin.url")
+            origin = _git(
+                main_worktree,
+                "config",
+                "--local",
+                "--includes",
+                "--get",
+                "remote.origin.url",
+            )
         except subprocess.CalledProcessError as error:
             if error.returncode != 1:
                 raise
@@ -30,9 +41,7 @@ def discover(directory: Path | None = None) -> Repository:
         if origin:
             identity = normalize_origin(origin)
         else:
-            first_record = _git(root, "worktree", "list", "--porcelain", "-z")
-            main_worktree = first_record.split("\0", 1)[0].removeprefix("worktree ")
-            identity = str(Path(main_worktree).resolve())
+            identity = str(main_worktree)
         return Repository(root, identity)
     except (subprocess.CalledProcessError, OSError, ValueError) as error:
         detail = (
