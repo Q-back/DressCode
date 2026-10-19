@@ -24,7 +24,22 @@ This comes out of a design session on making agent code quality enforceable rath
 
 ### State and scope
 
-10. **A run is keyed by repo and branch, and verdicts are pinned to a diff fingerprint.** Not session (dies, harness-specific), not directory (breaks under worktrees), not worktree (breaks on branch switch). `run_key = repo_id + ":" + branch`, detached HEAD falling back to `detached-<sha>`; git already refuses two worktrees on one branch, so worktrees separate themselves. Each answer stores `sha256` of the diff it was given; a later change makes the verdict `stale` and `check` demands a re-answer. Without this, answer clean then write another 400 lines passes forever.
+10. **Keep one review run per repo and branch. Answers only cover the changes reviewed.**
+
+    Two values do different jobs:
+
+    - **Run key: which review run to use.** Join the repo identity and branch name with `:`: `run_key = repo_id + ":" + branch`. For example, if `repo_id` is `acme/dresscode` and the branch is `feature/add-cli`, the key is `acme/dresscode:feature/add-cli`. How `repo_id` is chosen is described in decision 11. Without a checked-out branch (detached HEAD), use `detached-<sha>` in place of the branch name.
+    - **Diff fingerprint: whether the reviewed changes are still the same.** The fingerprint is a SHA-256 hash: a value calculated from the reviewed diff's contents. Save it with each answer. It covers the changes included in the review, not excluded files. Before allowing hand-over, `dresscode check` compares the saved fingerprint with the current one. If they differ, the answer is `stale` and the reviewer must answer again.
+
+    ```text
+    answer a question → save the answer and the current diff fingerprint
+    edit reviewed code → the diff fingerprint changes
+    dresscode check → stale answer; a new answer is required
+    ```
+
+    This prevents an answer from approving code added after the review. Staging or committing the same changes does not make an answer stale, as long as the merge base stays the same.
+
+    The run belongs to the repo and branch, not the agent session or a working directory. That lets it survive session restarts and keeps different branches separate. Git normally prevents two worktrees from using the same branch, so they get separate runs too.
 11. **State is a global store; config is three layers.** Run state lives in `$XDG_STATE_HOME/dresscode/runs/`, never in the repo — it is churn no reviewer wants in a merge request. Config resolves highest-first: `~/.config/dresscode/repos/<repo_id>.toml` (private, per-repo, wins), then repo-local `.dresscode/` (team rules, reviewable in merge requests), then `~/.config/dresscode/config.toml` (yours everywhere). Entries merge by `id`; a higher layer overrides fields or sets `enabled = false` to kill a lower entry. `repo_id` is the normalized origin URL, falling back to the realpath of the main worktree.
 12. **The current diff is merge base to working tree, untracked files included.** `base = config.base_ref ?? origin/HEAD ?? default branch`, then `git diff --merge-base $base` plus `git ls-files --others --exclude-standard` counted as additions. The reviewer must see the final cumulative change across all intermediate commits, including uncommitted work. In a clean checkout, as in CI, this reduces to the committed branch diff against the merge base. Staged-only would let an agent hide a whole new module from the review.
 13. **Size counts added lines, absolutely.** Deletions are excluded, because counting them punishes deleting code, and there is no declared-versus-actual ratio: it needs a declaration to exist and is gamed by inflating it. The threshold is not a config key — it lives in the question text ("under 400?"), which is already per-repo because the question is; `dresscode diff` only reports counts. What is configured is `diff.exclude`, a pathspec list defaulting to lockfiles, `vendor/`, snapshots, cassettes and fixtures.
