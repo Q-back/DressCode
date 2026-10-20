@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from dresscode import context
 from dresscode.cli import app
 from dresscode.config import layer_paths
 from dresscode.repo import discover
@@ -187,13 +188,62 @@ def test_timeout_kills_shell_descendants(git_repo: Path, tmp_path: Path):
     assert not marker.exists()
 
 
-def test_changed_global_command_requires_new_delivery(git_repo: Path):
+@pytest.mark.parametrize("waived", [False, True])
+def test_changed_global_command_requires_new_delivery(git_repo: Path, waived: bool):
     configure(git_repo, "printf first", "global")
     invoke("list")
-    invoke("answer", "size", "--yes", "--evidence", "Reviewed")
+    invoke("answer", "size", "--no" if waived else "--yes", "--evidence", "Reviewed")
+    if waived:
+        invoke("waive", "size", "--reason", "Accepted")
     configure(git_repo, "printf second", "global")
     invoke("answer", "size", "--yes", "--evidence", "Reviewed", code=2)
     invoke("check", code=1)
     invoke("list")
+    assert invoke("check", code=1)["entries"][0]["state"] == "stale"
+    summary = invoke("report")
+    assert summary["status"] == "failed"
+    assert summary["entries"][0]["context_output"] == "first"
+    if waived:
+        invoke("waive", "size", "--reason", "Still accepted", code=2)
     invoke("answer", "size", "--yes", "--evidence", "Reviewed again")
+    assert invoke("check")["status"] == "passed"
     assert invoke("report")["entries"][0]["context_output"] == "second"
+    assert invoke("report")["entries"][0]["context_command"] == "printf second"
+
+
+def test_large_finite_timeout_is_supported(git_repo: Path):
+    configure(git_repo, "printf evidence", "global", timeout=1e300)
+    assert invoke("list")["entries"][0]["context_output"] == "evidence"
+
+
+@pytest.mark.parametrize("method", ["select", "register"])
+def test_capture_error_is_structured_and_reaps_process(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch, method: str
+):
+    processes = []
+    original_popen = context.subprocess.Popen
+
+    def popen(*args, **kwargs):
+        process = original_popen(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    def fail_selector(*args, **kwargs):
+        raise TypeError("selector unavailable")
+
+    monkeypatch.setattr(context.subprocess, "Popen", popen)
+    monkeypatch.setattr(context.selectors.DefaultSelector, method, fail_selector)
+    output, error = context._capture("sleep 30", git_repo, 10)
+    assert output == ""
+    assert "selector unavailable" in error
+    assert processes[0].poll() is not None
+
+
+def test_removing_context_requires_a_new_answer(git_repo: Path):
+    rules = configure(git_repo, "printf evidence", "global")
+    invoke("list")
+    invoke("answer", "size", "--yes", "--evidence", "Reviewed")
+    rules.write_text(rules.read_text().replace('context = "printf evidence"\n', ""))
+    assert invoke("check", code=1)["entries"][0]["state"] == "stale"
+    invoke("answer", "size", "--yes", "--evidence", "Reviewed again")
+    assert invoke("check")["status"] == "passed"

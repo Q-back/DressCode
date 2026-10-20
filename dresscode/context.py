@@ -90,6 +90,7 @@ def _capture(command: str, root: Path, timeout: float) -> tuple[str, str]:
     deadline = time.monotonic() + timeout
     try:
         with (
+            selectors.DefaultSelector() as selector,
             subprocess.Popen(
                 command,
                 shell=True,
@@ -99,17 +100,16 @@ def _capture(command: str, root: Path, timeout: float) -> tuple[str, str]:
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
             ) as process,
-            selectors.DefaultSelector() as selector,
         ):
-            assert process.stdout is not None and process.stderr is not None
-            selector.register(process.stdout, selectors.EVENT_READ, "stdout")
-            selector.register(process.stderr, selectors.EVENT_READ, "stderr")
             try:
+                assert process.stdout is not None and process.stderr is not None
+                selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+                selector.register(process.stderr, selectors.EVENT_READ, "stderr")
                 while selector.get_map():
                     remaining = deadline - time.monotonic()
                     if remaining <= 0:
                         raise subprocess.TimeoutExpired(command, timeout)
-                    for key, _ in selector.select(remaining):
+                    for key, _ in selector.select(min(remaining, 1.0)):
                         chunk = os.read(key.fd, 8192)
                         if not chunk:
                             selector.unregister(key.fileobj)
@@ -123,11 +123,16 @@ def _capture(command: str, root: Path, timeout: float) -> tuple[str, str]:
                     f"Context exited {process.returncode}" if process.returncode else ""
                 )
             except subprocess.TimeoutExpired:
-                os.killpg(process.pid, signal.SIGKILL)
-                process.wait()
                 error = f"Context timeout after {timeout:g} seconds"
-    except OSError as error:
-        return "", f"Cannot execute context: {error}"
+            finally:
+                if process.poll() is None or selector.get_map():
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+    except (OSError, TypeError, ValueError, OverflowError) as error:
+        return "", f"Cannot execute or capture context: {error}"
     output = stdout.decode("utf-8", errors="replace").strip()
     if truncated:
         output += "\n[truncated]"

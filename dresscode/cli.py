@@ -205,6 +205,7 @@ def answer(
                 entry, answer_value
             ),
             context_output=context_output,
+            context_command=entry.context,
         )
     except (RunError, StoreError) as error:
         fail(str(error), json_output)

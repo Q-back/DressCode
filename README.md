@@ -143,8 +143,10 @@ bounded memory. Listing succeeds while surfacing these per-entry blockers;
 
 `list` saves delivered context in global run state, tied to the current diff and
 command. For context entries, `answer` requires a successful current delivery;
-run `list` again after changing the diff or command. It copies that exact output
-into the verdict, rather than rerunning the command. `report` shows the recorded
+run `list` again after changing the diff or command. A changed or removed command
+also stales existing answers and waivers; relisting alone cannot renew them.
+`answer` copies the delivered output and command into the verdict, rather than
+rerunning the command. `report` shows the recorded
 `context_output` beside the verdict in text and JSON. Neither `check` nor `report`
 executes commands. Reset also clears delivered context.
 

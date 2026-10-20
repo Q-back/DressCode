@@ -34,6 +34,7 @@ class VerdictRecord(TypedDict):
     fingerprint: str
     timestamp: str
     context_output: NotRequired[str]
+    context_command: NotRequired[str]
 
 
 class HistoryRecord(VerdictRecord):
@@ -93,6 +94,7 @@ class RunStore:
         fingerprint: str,
         after_save: Callable[[], None] | None = None,
         context_output: str | None = None,
+        context_command: str | None = None,
     ) -> VerdictRecord:
         with self._lock():
             previous_state = self._read()
@@ -108,6 +110,8 @@ class RunStore:
             }
             if context_output is not None:
                 record["context_output"] = context_output
+            if context_command is not None:
+                record["context_command"] = context_command
             state["verdicts"][entry.id] = record
             state["waivers"].pop(entry.id, None)
             self._write(state)
@@ -136,6 +140,7 @@ class RunStore:
                 verdict is None
                 or verdict["fingerprint"] != fingerprint
                 or verdict["verdict"] != violating
+                or verdict.get("context_command") != entry.context
             ):
                 raise RunError(
                     f"{entry.id}: waiver requires a current violating verdict"
@@ -236,6 +241,11 @@ def _valid_state(document: object, run_key: str) -> bool:
         if not isinstance(record, dict) or not all(
             isinstance(record.get(field), str)
             for field in ("verdict", "evidence", "fingerprint", "timestamp")
+        ):
+            return False
+        if any(
+            key in record and not isinstance(record[key], str)
+            for key in ("context_output", "context_command")
         ):
             return False
     for identifier, waiver in waivers.items():

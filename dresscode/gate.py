@@ -67,7 +67,10 @@ def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:
     record = state["verdicts"].get(entry.id)
     if record is None:
         return "unanswered"
-    if record["fingerprint"] != fingerprint:
+    if (
+        record["fingerprint"] != fingerprint
+        or record.get("context_command") != entry.context
+    ):
         return "stale"
     if record["verdict"] == "context_failed":
         return "context_failed"
