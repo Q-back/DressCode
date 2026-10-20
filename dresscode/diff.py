@@ -122,7 +122,9 @@ def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
     return root_commit, root_commit
 
 
-def _reject_dirty_submodules(root: Path, pathspecs: tuple[str, ...]) -> None:
+def _reject_dirty_submodules(
+    root: Path, pathspecs: tuple[str, ...], enclosing: str | None = None
+) -> None:
     entries = _git(root, "ls-files", "--stage", "-z", "--", *pathspecs)
     for record in filter(None, entries.split(b"\0")):
         header, name = record.split(b"\t", 1)
@@ -130,7 +132,9 @@ def _reject_dirty_submodules(root: Path, pathspecs: tuple[str, ...]) -> None:
             continue
         path = os.fsdecode(name)
         submodule = root / path
-        if (submodule / ".git").exists() and _git(
+        if submodule.is_symlink() or not (submodule / ".git").exists():
+            continue
+        if _git(
             submodule,
             "--no-optional-locks",
             "status",
@@ -139,10 +143,11 @@ def _reject_dirty_submodules(root: Path, pathspecs: tuple[str, ...]) -> None:
             "--ignore-submodules=none",
         ):
             raise DiffError(
-                f"Cannot fingerprint dirty submodule {path!r}. Commit changes "
-                "inside it and update the parent pointer, or exclude its path "
-                "with diff.exclude."
+                f"Cannot fingerprint dirty submodule {enclosing or path!r}. "
+                "Commit changes inside it and update the parent pointer, "
+                "or exclude its path with diff.exclude."
             )
+        _reject_dirty_submodules(submodule, (), enclosing or path)
 
 
 def _include_untracked(

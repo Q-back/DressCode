@@ -118,8 +118,12 @@ def test_uninitialized_clean_submodule_does_not_inspect_parent_status(
     assert [file.path for file in scope(root).files] == ["README.md", "lib"]
 
 
+@pytest.mark.parametrize("dirty", ["tracked", "untracked-hidden", "deep-hidden"])
 def test_dirty_nested_submodule_is_rejected(
-    submodule_repo: tuple[Path, Path], tmp_path: Path
+    submodule_repo: tuple[Path, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    dirty: str,
 ) -> None:
     root, submodule = submodule_repo
     git(
@@ -132,9 +136,68 @@ def test_dirty_nested_submodule_is_rejected(
         "nested",
     )
     git(submodule, "commit", "--all", "--message", "Nested submodule")
-    (submodule / "nested/file.txt").write_text("dirty nested content\n")
+    nested = submodule / "nested"
+    if dirty == "deep-hidden":
+        git(
+            nested,
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            str(tmp_path / "submodule-source"),
+            "deep",
+        )
+        git(
+            nested,
+            "-c",
+            "user.name=Tests",
+            "-c",
+            "user.email=tests@dresscode.invalid",
+            "commit",
+            "--all",
+            "--message",
+            "Deep baseline",
+        )
+        git(submodule, "commit", "--all", "--message", "Nested pointer update")
+        git(nested, "config", "submodule.deep.ignore", "all")
+        (nested / "deep/file.txt").write_text("dirty deep content\n")
+    elif dirty == "untracked-hidden":
+        git(nested, "config", "status.showUntrackedFiles", "no")
+        (nested / "untracked.txt").write_text("untracked\n")
+    else:
+        (nested / "file.txt").write_text("dirty nested content\n")
+    if dirty.endswith("hidden"):
+        assert (
+            git(
+                submodule,
+                "--no-optional-locks",
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+                "--ignore-submodules=none",
+            )
+            == ""
+        )
     with pytest.raises(DiffError, match="dirty submodule 'lib'"):
         scope(root)
+    monkeypatch.chdir(root)
+    result = CliRunner().invoke(app, ["diff", "--json"])
+    assert result.exit_code == 2, result.output
+    assert "dirty submodule 'lib'" in json.loads(result.stdout)["error"]
+
+
+def test_submodule_replaced_by_symlink_does_not_inspect_its_target(
+    submodule_repo: tuple[Path, Path], tmp_path: Path
+) -> None:
+    root, submodule = submodule_repo
+    git(root, "submodule", "deinit", "--", "lib")
+    submodule.rmdir()
+    target = tmp_path / "submodule-source"
+    (target / "file.txt").write_text("dirty outside scope\n")
+    submodule.symlink_to(target, target_is_directory=True)
+    before = scope(root)
+    (target / "file.txt").write_text("different outside scope\n")
+    assert scope(root) == before
 
 
 @pytest.mark.parametrize("options", [[], ["--numstat"], ["--json"]])
