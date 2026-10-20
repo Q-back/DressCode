@@ -1,5 +1,8 @@
 # Task hand-over
 
+Tests must pass before a task can be declared complete. If tests fail or cannot
+be run, report the blocker and leave the task incomplete.
+
 Before declaring a code task complete, ask a fresh-context reviewer who has not
 seen the implementation transcript to review the final cumulative changes. Do
 not ask the implementer to substitute self-review for this independent pass.
