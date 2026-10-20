@@ -33,12 +33,12 @@ Ship this section as three sequential commits. Each boundary includes the releva
 - [x] 3.1 Implement base ref resolution with the configured → `origin/HEAD` → `main`/`master` → root commit chain, reporting the resolved base.
 - [x] 3.2 Implement the scoped diff: `git diff --merge-base <base>` against the working tree, plus untracked non-ignored files as additions.
 - [x] 3.3 Implement `diff.exclude` with the documented defaults, applied to listing and counting.
-- [ ] 3.4 Implement the fingerprint over scoped content: stable when nothing changes, different after a scoped edit, unchanged by an excluded edit.
+- [x] 3.4 Implement the fingerprint over scoped content: stable when nothing changes, different after a scoped edit, unchanged by an excluded edit. Cover clean submodules as Gitlink commit-ID changes only; reject dirty non-excluded submodules with an actionable exit-`2` error.
 - [x] 3.5 Implement `dresscode diff` with `--numstat` and `--json`.
 - [x] 3.6 Tests against the real temporary repository, no mocking of git: committed plus staged plus unstaged all counted; base-moved-on case; untracked included, ignored excluded; lockfile excluded by default; the three fingerprint properties; staging and committing unchanged scoped content preserving the fingerprint when the merge base is unchanged.
 - [x] 3.7 Document base resolution, working-tree and untracked scope, exclusions and `diff` output.
 
-Review follow-up: index-only removals and untracked nested-repository errors have regression coverage. Task 3.4 remains open because dirty submodule edits share a fingerprint. The user must choose recursive submodule review or explicit dirty-submodule rejection before this group is complete.
+Submodule policy: the user selected explicit dirty-submodule rejection for v0. Clean submodules cover commit-ID changes only, not recursive file review; excluded submodules do not block the command. Include real-Git regressions for tracked, staged, untracked and nested dirtiness, ignored and excluded content, clean pointer updates, display settings and text/JSON errors in this commit boundary.
 
 ## 4. Commit: Record diff-bound verdicts
 

@@ -63,6 +63,7 @@ def collect(config: Configuration) -> ScopedDiff:
     pathspecs = _pathspecs(config)
     base_ref, base_commit = resolve_base(root, config.settings.get("base_ref"))
     merge_base = _git(root, "merge-base", "HEAD", base_commit).decode().strip()
+    _reject_dirty_submodules(root, pathspecs)
     arguments = ("diff", "--merge-base", base_commit, *DIFF_OPTIONS)
     counts = _git(root, *arguments, "--numstat", "-z", "--", *pathspecs)
     files = [_parse_numstat(record) for record in counts.split(b"\0") if record]
@@ -119,6 +120,29 @@ def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
         _git(root, "rev-list", "--max-parents=0", "HEAD").decode().splitlines()[0]
     )
     return root_commit, root_commit
+
+
+def _reject_dirty_submodules(root: Path, pathspecs: tuple[str, ...]) -> None:
+    entries = _git(root, "ls-files", "--stage", "-z", "--", *pathspecs)
+    for record in filter(None, entries.split(b"\0")):
+        header, name = record.split(b"\t", 1)
+        if not header.startswith(b"160000 "):
+            continue
+        path = os.fsdecode(name)
+        submodule = root / path
+        if (submodule / ".git").exists() and _git(
+            submodule,
+            "--no-optional-locks",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+            "--ignore-submodules=none",
+        ):
+            raise DiffError(
+                f"Cannot fingerprint dirty submodule {path!r}. Commit changes "
+                "inside it and update the parent pointer, or exclude its path "
+                "with diff.exclude."
+            )
 
 
 def _include_untracked(
@@ -241,7 +265,15 @@ def _fingerprint(
         elif new_mode == "120000":
             content = os.fsencode(os.readlink(root / path))
         elif new_mode == "160000":
-            content = _git(root, *arguments, "--binary", "--", f":(literal){path}")
+            content = _git(
+                root,
+                *arguments,
+                "--binary",
+                "--submodule=short",
+                "--no-color",
+                "--",
+                f":(literal){path}",
+            )
         else:
             content = (root / path).read_bytes()
         records.append(

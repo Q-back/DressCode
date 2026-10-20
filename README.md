@@ -153,7 +153,13 @@ The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and curr
 
 An untracked nested Git repository exits `2` with a named error rather than being silently skipped. Add it as a submodule or explicitly exclude its path with `diff.exclude`.
 
-**Known limitation:** dirty submodule contents are not safely bound to the fingerprint. Do not use these fingerprints to approve uncommitted changes inside submodules.
+### Submodules
+
+Clean submodules are reviewed as Gitlink commit-ID changes only. Their internal file diffs are not expanded into the listing, line counts or fingerprint. Staging or committing an unchanged parent pointer preserves its fingerprint, regardless of Git’s submodule display setting.
+
+A non-excluded, initialized submodule with staged edits, unstaged edits or non-ignored untracked files makes `diff` exit `2` without producing a diff or fingerprint. Dirty nested submodules also block it; Git settings that hide submodule changes do not bypass this check. The error names the submodule and explains the remedies: commit changes inside it and update the parent pointer, or explicitly exclude the submodule path with `diff.exclude`. Ignored files alone do not block inspection.
+
+With `--json`, this is a single `{"status": "error", "error": "..."}` document, not a successful result. DressCode does not modify files, reset submodules, automatically exclude them or block Git commits.
 
 ## Development
 

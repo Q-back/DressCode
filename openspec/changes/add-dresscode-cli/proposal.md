@@ -25,7 +25,7 @@ implement ──> dresscode list      questions only, expectations sealed
 - `dresscode check [--strict]` — the gate before the agent declares the task done, covering the final cumulative diff rather than intermediate commits: exit `0` green or waived, `1` action needed with the fixing command named per entry, `2` usage error. `--strict` fails on waivers.
 - `dresscode report` — colorful human summary of why the task is believed done, showing verdicts, evidence and waivers.
 - `dresscode add`, `dresscode retire <id> [--reason]`, `dresscode reset`, `dresscode trust`.
-- `dresscode diff [--numstat]` — the diff definition as a command, so entries can use it as context; merge base to working tree, untracked included, configured exclusions applied.
+- `dresscode diff [--numstat]` — the diff definition as a command, so entries can use it as context; merge base to working tree, untracked included, configured exclusions applied. Clean submodules cover Gitlink commit-ID changes only; dirty non-excluded submodules produce an error instead of an unsafe fingerprint.
 - Every command offering `--json` so a harness, a hand-over gate and a subagent can all consume the output.
 - Python and `uv`, installable with `uv tool install .`.
 
@@ -36,6 +36,7 @@ implement ──> dresscode list      questions only, expectations sealed
 - No lifecycle automation: entries do not graduate to `ast-grep` on their own and do not decay (see `backlog.md`).
 - No entry scoping by glob or tag; an inapplicable question is answered `n-a`.
 - No seeded rule list, no team-shared rule packs, no CI service, no dashboard.
+- No recursive review of submodule file diffs.
 
 ## Why a tool and not a markdown checklist
 

@@ -108,6 +108,60 @@ The system SHALL compute a fingerprint of the scoped diff, stable across invocat
 - **WHEN** only an excluded lockfile changes
 - **THEN** the fingerprint is unchanged
 
+### Requirement: Submodule scope
+
+The system SHALL review clean submodules as Gitlink commit-ID changes only, without recursively including their internal file diffs in listing, counting or fingerprinting. Git submodule display settings SHALL NOT change this representation or its fingerprint.
+
+#### Scenario: Clean pointer update
+
+- **WHEN** a clean submodule points to a different commit
+- **THEN** the parent Gitlink change is listed and fingerprinted, without expanding submodule files
+- **AND** staging or committing the unchanged pointer preserves the fingerprint when the merge base is unchanged
+
+#### Scenario: Clean uninitialized submodule
+
+- **WHEN** a clean submodule is uninitialized
+- **THEN** its commit-ID change can still be inspected without treating the parent repository as a submodule worktree
+
+### Requirement: Dirty submodule rejection
+
+The system SHALL reject any non-excluded initialized submodule containing staged edits, unstaged edits, non-ignored untracked files or a dirty nested submodule before producing a diff or fingerprint. It SHALL exit `2`, name the path, and explain how to commit inside it and update the parent pointer, or explicitly exclude its path with `diff.exclude`. Git settings that hide dirtiness SHALL NOT bypass this check.
+
+#### Scenario: Dirty tracked submodule content
+
+- **WHEN** a non-excluded submodule has staged or unstaged edits, even with its commit pointer unchanged
+- **THEN** `diff` exits `2`, names the submodule and remedies, and emits no successful diff or fingerprint
+
+#### Scenario: Non-ignored untracked content
+
+- **WHEN** a non-excluded submodule has non-ignored untracked files, even when Git configuration hides them
+- **THEN** `diff` exits `2` with the same actionable error
+
+#### Scenario: Structured error
+
+- **WHEN** a dirty submodule blocks `diff --json`
+- **THEN** stdout is a single JSON error document, stderr is empty, and the exit code is `2`
+
+#### Scenario: Excluded dirty submodule
+
+- **WHEN** `diff.exclude` matches a dirty submodule path
+- **THEN** it is omitted and neither blocks the command nor affects the fingerprint
+
+#### Scenario: Ignored files
+
+- **WHEN** a submodule has only ignored files
+- **THEN** it does not block diff inspection
+
+#### Scenario: Read-only error
+
+- **WHEN** a dirty submodule causes an error
+- **THEN** no files or indexes are modified, no submodule is reset or automatically excluded, and Git commits remain unrestricted
+
+#### Scenario: Dirty nested submodule
+
+- **WHEN** an initialized submodule contains a dirty nested submodule
+- **THEN** `diff` exits `2` naming the enclosing scoped submodule
+
 ### Requirement: Outside a repository
 
 The system SHALL exit `2` with a clear message when run outside a git repository.
