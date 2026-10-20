@@ -139,13 +139,17 @@ def test_large_output_is_capped_and_recorded(git_repo: Path):
     assert invoke("report")["entries"][0]["context_output"] == output
 
 
-@pytest.mark.parametrize("value", ["0", "-1", "true", '"slow"', "nan", "inf"])
+@pytest.mark.parametrize(
+    "value", ["0", "-1", "true", '"slow"', "nan", "inf", "1" + "0" * 400]
+)
 def test_invalid_timeout_is_a_configuration_error(git_repo: Path, value: str):
     rules = configure(git_repo, "true")
     rules.write_text(
         rules.read_text().replace("timeout_seconds = 10", f"timeout_seconds = {value}")
     )
-    assert "timeout_seconds" in invoke("list", code=2)["error"]
+    error = invoke("list", code=2)["error"]
+    assert "timeout_seconds" in error
+    assert str(rules) in error
 
 
 def test_real_diff_context_from_subdirectory(

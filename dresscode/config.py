@@ -62,12 +62,16 @@ def load(repository: Repository) -> Configuration:
                 if isinstance(context, dict)
                 else None
             )
-            if (
-                isinstance(timeout, bool)
-                or not isinstance(timeout, (int, float))
-                or not math.isfinite(timeout)
-                or timeout <= 0
-            ):
+            try:
+                valid_timeout = (
+                    not isinstance(timeout, bool)
+                    and isinstance(timeout, (int, float))
+                    and timeout > 0
+                    and math.isfinite(timeout)
+                )
+            except OverflowError:
+                valid_timeout = False
+            if not valid_timeout:
                 raise ConfigurationError(
                     f"{path}: context.timeout_seconds must be positive and finite"
                 )
