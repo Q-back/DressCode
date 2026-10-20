@@ -29,11 +29,33 @@ PLACEHOLDERS = tuple(
 runner = CliRunner()
 
 
+def normalize_help_text(output: str) -> str:
+    plain_text = Text.from_ansi(output).plain
+    without_panel_borders = plain_text.replace("│", " ")
+    return " ".join(without_panel_borders.split())
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("  --json\tEmit JSON.\n", "--json Emit JSON."),
+        ("\x1b[36m-\x1b[0m\x1b[36m-json\x1b[0m", "--json"),
+        (
+            "│ private (personal overrides for this │\n│ repository) │",
+            "private (personal overrides for this repository)",
+        ),
+    ],
+    ids=["plain-whitespace", "ansi-styled-option", "wrapped-panel-text"],
+)
+def test_normalize_help_text(output: str, expected: str) -> None:
+    assert normalize_help_text(output) == expected
+
+
 def test_help_lists_every_v0_command() -> None:
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    help_text = Text.from_ansi(result.stdout).plain
+    help_text = normalize_help_text(result.stdout)
     for command in COMMANDS:
         assert command in help_text
 
@@ -45,8 +67,7 @@ def test_add_help_explains_layers_outside_a_git_worktree(
     result = runner.invoke(app, ["add", "--help"], color=False)
 
     assert result.exit_code == 0
-    help_text = Text.from_ansi(result.stdout).plain
-    help_text = " ".join(help_text.replace("│", " ").split())
+    help_text = normalize_help_text(result.stdout)
     assert "repo (shared repository config)" in help_text
     assert "private (personal overrides for this repository)" in help_text
     assert "global (defaults for all repositories)" in help_text
@@ -81,7 +102,7 @@ def test_command_help_is_available(command: str) -> None:
     result = runner.invoke(app, [command, "--help"])
 
     assert result.exit_code == 0
-    help_text = Text.from_ansi(result.stdout).plain
+    help_text = normalize_help_text(result.stdout)
     assert "--json" in help_text
 
 
@@ -114,6 +135,6 @@ def test_installed_entry_point_works_outside_the_project(tmp_path: Path) -> None
     )
 
     assert result.returncode == 0, result.stderr
-    help_text = Text.from_ansi(result.stdout).plain
+    help_text = normalize_help_text(result.stdout)
     for command in COMMANDS:
         assert command in help_text
