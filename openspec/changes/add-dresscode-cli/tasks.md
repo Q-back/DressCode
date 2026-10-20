@@ -59,12 +59,12 @@ Submodule policy: the user selected explicit dirty-submodule rejection for v0. C
 
 ## 6. Commit: Supply trusted context evidence end to end
 
-- [ ] 6.1 Implement context execution from the repository root when `list` builds an entry, attaching captured stdout to its question, with an output cap, a truncation marker and `context.timeout_seconds` (default `10`).
-- [ ] 6.2 Implement the trust store: repository-local commands blocked until `dresscode trust`, trust bound to a content hash of the repository-local layer, private and global layers always trusted.
-- [ ] 6.3 Implement `context_failed` on non-zero exit or timeout, with the stderr tail surfaced and `check` blocking.
-- [ ] 6.4 Implement recording the context output into the run state when answering and showing it in `report`.
-- [ ] 6.5 Tests: context output delivered in `list` without sealed fields; untrusted clone runs nothing and names `dresscode trust`; trust granted then invalidated by an edit; failing and hanging commands both landing as `context_failed`; recorded output appearing in the report; truncation marker.
-- [ ] 6.6 Document an example entry using `dresscode diff --numstat`, trust, timeouts and failure output; remove the interim context-unavailable limitation.
+- [x] 6.1 Implement context execution from the repository root when `list` builds an entry, attaching captured stdout to its question, with an output cap, a truncation marker and `context.timeout_seconds` (default `10`).
+- [x] 6.2 Implement the trust store: repository-local commands blocked until `dresscode trust`, trust bound to a content hash of the repository-local layer, private and global layers always trusted.
+- [x] 6.3 Implement `context_failed` on non-zero exit or timeout, with the stderr tail surfaced and `check` blocking.
+- [x] 6.4 Implement recording the context output into the run state when answering and showing it in `report`.
+- [x] 6.5 Tests: context output delivered in `list` without sealed fields; untrusted clone runs nothing and names `dresscode trust`; trust granted then invalidated by an edit; failing and hanging commands both landing as `context_failed`; recorded output appearing in the report; truncation marker.
+- [x] 6.6 Document an example entry using `dresscode diff --numstat`, trust, timeouts and failure output; remove the interim context-unavailable limitation.
 
 ## 7. Commit: Verify the full workflow and publish usage
 

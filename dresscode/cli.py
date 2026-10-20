@@ -8,6 +8,8 @@ import typer
 
 from dresscode.authoring import append_entry
 from dresscode.config import Configuration, ConfigurationError, load
+from dresscode.context import execute, required_context
+from dresscode.context import trust as trust_context
 from dresscode.diff import DiffError, collect
 from dresscode.entries import Entry
 from dresscode.gate import review
@@ -47,18 +49,6 @@ def configuration(json_output: bool) -> Configuration:
         return load(repository(json_output))
     except ConfigurationError as error:
         fail(str(error), json_output)
-
-
-def unimplemented(
-    ctx: typer.Context,
-    json_output: JsonOutput = False,
-) -> NoReturn:
-    configuration(json_output)
-    if json_output:
-        typer.echo(json.dumps({"command": ctx.info_name, "status": "unimplemented"}))
-    else:
-        typer.echo(f"dresscode {ctx.info_name} is not implemented yet.", err=True)
-    raise typer.Exit(code=2)
 
 
 @app.command("add", help="Append a review question to a configuration layer.")
@@ -114,24 +104,48 @@ def retire(identifier: str, reason: str = "", json_output: JsonOutput = False) -
     )
 
 
-@app.command(
-    "list", help="List questions with expectations sealed. Context is not executed."
-)
+@app.command("list", help="List sealed questions with trusted context evidence.")
 def list_entries(json_output: JsonOutput = False) -> None:
     config = configuration(json_output)
     try:
         retired = EntryStore(config.repository).retirements()
-    except StoreError as error:
+        active = [entry for entry in config.entries if entry.id not in retired]
+        contextual = [entry for entry in active if entry.context is not None]
+        contexts = {}
+        if contextual:
+            fingerprint = collect(config).fingerprint
+            contexts = {
+                entry.id: execute(config, entry, fingerprint) for entry in contextual
+            }
+            RunStore(config.repository).save_contexts(contexts)
+    except (StoreError, RunError, DiffError) as error:
         fail(str(error), json_output)
-    entries = [
-        {"id": entry.id, "question": entry.question}
-        for entry in config.entries
-        if entry.id not in retired
-    ]
+    entries = []
+    for entry in active:
+        item = {"id": entry.id, "question": entry.question}
+        if entry.id in contexts:
+            record = contexts[entry.id]
+            item.update(
+                {key: record[key] for key in ("state", "context_output", "error")}
+            )
+        entries.append(item)
     typer.echo(
         json.dumps({"entries": entries})
         if json_output
-        else "\n".join(f"{entry['id']}: {entry['question']}" for entry in entries)
+        else "\n".join(
+            f"{entry['id']}: {entry['question']}"
+            + (
+                f"\n  Context: {entry['context_output']}"
+                if "context_output" in entry
+                else ""
+            )
+            + (
+                f"\n  [{entry['state']}] {entry['error']}"
+                if bool(entry.get("error"))
+                else ""
+            )
+            for entry in entries
+        )
     )
 
 
@@ -175,7 +189,14 @@ def answer(
     expected = "yes" if entry.expects else "no"
     matched = verdict == "n-a" or verdict == expected
     try:
-        record = RunStore(config.repository).record(
+        run = RunStore(config.repository)
+        context_output = None
+        if entry.context is not None:
+            context = required_context(config, entry, run.read(), scoped.fingerprint)
+            if context["state"] != "ready":
+                fail(context["error"], json_output)
+            context_output = context["context_output"]
+        record = run.record(
             entry,
             verdict,
             evidence.strip(),
@@ -183,6 +204,7 @@ def answer(
             after_save=lambda: EntryStore(config.repository).record(
                 entry, answer_value
             ),
+            context_output=context_output,
         )
     except (RunError, StoreError) as error:
         fail(str(error), json_output)
@@ -225,6 +247,8 @@ def check(
         for entry in decision["entries"]:
             if entry["commands"]:
                 typer.echo(f"{entry['id']}: {entry['question']} [{entry['state']}]")
+                if bool(entry.get("error")):
+                    typer.echo(f"  {entry['error']}")
                 if entry["state"] == "waived":
                     typer.echo(f"  Waiver: {state['waivers'][entry['id']]['reason']}")
                 for command in entry["commands"]:
@@ -327,11 +351,17 @@ def show_diff(
     typer.echo(f"{scoped.added}\t{scoped.removed}\tTOTAL")
 
 
-for name, description in {
-    "trust": "Trust repository-local context commands.",
-}.items():
-    app.command(name, help=f"{description} Unavailable: not implemented.")(
-        unimplemented
+@app.command("trust", help="Trust the current repository-local context configuration.")
+def trust(json_output: JsonOutput = False) -> None:
+    config = configuration(json_output)
+    try:
+        trust_context(config)
+    except RunError as error:
+        fail(str(error), json_output)
+    typer.echo(
+        json.dumps({"status": "trusted", "hash": config.local_hash})
+        if json_output
+        else "Trusted current repository-local context commands."
     )
 
 

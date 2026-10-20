@@ -1,5 +1,7 @@
 """Optional global, repository-local and private configuration layers."""
 
+import hashlib
+import math
 import os
 import tomllib
 from dataclasses import dataclass
@@ -20,29 +22,70 @@ class Configuration:
     repository: Repository
     settings: dict[str, Any]
     entries: tuple[Entry, ...]
+    local_contexts: frozenset[str] = frozenset()
+    local_hash: str = ""
 
 
 def load(repository: Repository) -> Configuration:
     settings: dict[str, Any] = {}
     entry_layers: list[tuple[Path, object]] = []
-    for paths in layer_paths(repository).values():
+    context_layers: dict[str, str] = {}
+    local_hash = hashlib.sha256()
+    for layer, paths in layer_paths(repository).items():
         for path in paths:
             if not path.exists():
                 continue
             try:
-                document = tomllib.loads(path.read_text(encoding="utf-8"))
+                content = path.read_bytes()
+                document = tomllib.loads(content.decode("utf-8"))
             except (OSError, UnicodeError, tomllib.TOMLDecodeError) as error:
                 raise ConfigurationError(f"{path}: {error}") from error
             settings = _merge_settings(
                 settings,
                 {key: value for key, value in document.items() if key != "entries"},
             )
-            entry_layers.append((path, document.get("entries", [])))
+            raw_entries = document.get("entries", [])
+            entry_layers.append((path, raw_entries))
+            if layer == "repo":
+                local_hash.update(path.name.encode() + b"\0" + content + b"\0")
+            if isinstance(raw_entries, list):
+                for fields in raw_entries:
+                    if (
+                        isinstance(fields, dict)
+                        and isinstance(fields.get("id"), str)
+                        and "context" in fields
+                    ):
+                        context_layers[fields["id"]] = layer
+            context = document.get("context", {})
+            timeout = (
+                context.get("timeout_seconds", 10)
+                if isinstance(context, dict)
+                else None
+            )
+            if (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, (int, float))
+                or not math.isfinite(timeout)
+                or timeout <= 0
+            ):
+                raise ConfigurationError(
+                    f"{path}: context.timeout_seconds must be positive and finite"
+                )
     try:
         entries = merge_entries(entry_layers)
     except EntryError as error:
         raise ConfigurationError(str(error)) from error
-    return Configuration(repository, settings, entries)
+    return Configuration(
+        repository,
+        settings,
+        entries,
+        frozenset(
+            identifier
+            for identifier, layer in context_layers.items()
+            if layer == "repo"
+        ),
+        local_hash.hexdigest(),
+    )
 
 
 def layer_paths(repository: Repository) -> dict[str, tuple[Path, ...]]:

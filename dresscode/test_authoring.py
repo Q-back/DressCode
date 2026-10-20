@@ -38,11 +38,8 @@ def run(*arguments: str) -> Result:
 
 
 @pytest.mark.parametrize("layer", [None, "repo", "private", "global"])
-def test_add_round_trips_to_sealed_listing(
-    git_repo: Path, tmp_path: Path, layer: str | None
-) -> None:
-    marker = tmp_path / "executed"
-    arguments = [*ADD, "--context", f"touch {marker}", "--json"]
+def test_add_round_trips_to_sealed_listing(git_repo: Path, layer: str | None) -> None:
+    arguments = [*ADD, "--json"]
     if layer is not None:
         arguments += ["--layer", layer]
     response = json.loads(run(*arguments).stdout)
@@ -58,7 +55,6 @@ def test_add_round_trips_to_sealed_listing(
     }
     text = run("list").stdout
     assert QUESTION in text and "SECRET" not in text and "expects" not in text
-    assert not marker.exists()
     assert not EntryStore(repository).path.exists()
 
 

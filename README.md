@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** question authoring, sealed listing, scoped diffs, review answers, waivers, the hand-over gate, reports and run reset work. Context commands are not executed, and `trust` remains unavailable (exit `2`).
+**Status:** question authoring, sealed listing with trusted context evidence, scoped diffs, review answers, waivers, the hand-over gate, reports and run reset work.
 
 ## Installation
 
@@ -29,11 +29,10 @@ uv run dresscode --help
 
 | Commands | Availability |
 |---|---|
-| `add`, `retire`, `list`, `diff`, `answer`, `waive`, `report`, `reset` | Available; success exits `0`, errors exit `2` |
+| `add`, `retire`, `list`, `diff`, `answer`, `waive`, `report`, `reset`, `trust` | Available; success exits `0`, errors exit `2` |
 | `check [--strict]` | Available; exits `0` when green, `1` when blocked, `2` on errors |
-| `trust` | Unavailable placeholder; exit `2` |
 
-Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`. The `trust` placeholder validates configuration, then reports `unimplemented` and exits `2`.
+Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`.
 
 ## Repository identity
 
@@ -69,7 +68,7 @@ reveal = "Prefer the existing factory over a hand-rolled mock."
 
 `id` and `question` must be strings and `expects` must be boolean. Optional fields are `reveal` (string, default empty), `context` (shell-command string) and `enabled` (boolean, default true). Unknown entry keys are rejected. Entries merge by `id`: a higher layer can supply only the fields it overrides, preserving the rest. Setting `enabled = false` removes an entry from the effective list.
 
-**Context commands are stored as text only and are not executed**, including during listing. `trust` is also unavailable.
+Context commands execute during `list`, subject to the trust policy below. Loading configuration alone does not execute commands.
 
 ## Author and list questions
 
@@ -88,11 +87,66 @@ uv run dresscode retire test-factory --reason "now an ast-grep rule"
 
 `add <id>` requires `--question` and `--expects true|false`. Optional flags are `--reveal`, `--context`, `--layer repo|private|global` (default `repo`) and `--json`. It appends a definition without dropping comments or unrelated TOML settings. With `.dresscode/`, it uses the last existing TOML file in filename order, or `rules.toml` if the directory is empty. Otherwise it writes `.dresscode.toml`. Global and private destinations are the files in the configuration table above. Layer precedence still applies to repeated IDs.
 
-`list` emits only enabled, non-retired entries as `id` and `question`, in both text and JSON. It never exposes `expects` or `reveal`, never runs context commands and does not increment counters. An empty list is successful; `--json` returns `{"entries": []}`. Reading an empty store creates no state files.
+`list` emits only enabled, non-retired entries as `id` and `question`, plus context evidence when configured, in both text and JSON. It never exposes `expects` or `reveal` and does not increment counters. An empty list is successful; `--json` returns `{"entries": []}`. Reading an empty store creates no state files.
 
 `retire <id> [--reason <text>]` removes an entry from future listings for this repository, across branches and linked worktrees. The reason is optional and defaults to empty. Retirement preserves the entry snapshot, reason and timestamp in `$XDG_STATE_HOME/dresscode/entries.sqlite3` (default state home: `~/.local/state`). Existing counters are kept, and configuration files are not modified. Unknown or already-retired IDs exit `2`.
 
 The same SQLite store holds per-repository, per-entry counters: `asked`, `violated`, `n_a` and `last_violated`. Counter writes are independent of configuration permissions. Retirement history is readable in the `retired` table; its `entry` column contains the original entry as JSON. Each recorded answer increments `asked`; violations and `n-a` answers update their respective counters.
+
+## Trusted context evidence
+
+An entry can supply a read-only shell command as evidence:
+
+```toml
+[context]
+timeout_seconds = 10
+
+[[entries]]
+id = "change-size"
+question = "Are the added lines under 400?"
+expects = true
+reveal = "Keep changes small enough to review in one sitting."
+context = "dresscode diff --numstat"
+```
+
+Inspect repository-local commands before allowing them to run:
+
+```sh
+dresscode trust
+dresscode list
+dresscode answer change-size --yes --evidence "Reviewed the listed totals."
+dresscode report
+```
+
+`trust` approves the current repository-local TOML filenames and contents for
+this checkout. Adding, removing, renaming or editing a layer file requires trust
+again. Approval is stored under `$XDG_STATE_HOME/dresscode/trust/`, never in the
+repository. Separate clones and linked worktrees need their own approval.
+Commands inherited from private or global configuration are always trusted;
+overriding only a question does not change the command's source layer.
+
+`list` runs trusted commands through the shell from the repository root, even
+when invoked in a subdirectory. Commands run with your permissions; DressCode
+cannot enforce read-only behavior. Trust approves configuration, not the contents
+of scripts it invokes. Use commands you understand and keep their dependencies
+under review.
+
+Context entries add `state`, `context_output` (trimmed stdout) and `error` to
+`list --json`. Untrusted local commands run nothing and report
+`context_untrusted`, naming `dresscode trust`. Non-zero exits and timeouts report
+`context_failed`, including the exit code or timeout and the last 4 KiB of stderr.
+The timeout defaults to 10 seconds; `context.timeout_seconds` must be a positive,
+finite number. Timeout terminates the shell and its process group. Stdout keeps
+its first 16 KiB, with `[truncated]` appended when more was emitted; capture uses
+bounded memory. Listing succeeds while surfacing these per-entry blockers;
+`check` exits `1` for them, even with an earlier passing or `n-a` answer.
+
+`list` saves delivered context in global run state, tied to the current diff and
+command. For context entries, `answer` requires a successful current delivery;
+run `list` again after changing the diff or command. It copies that exact output
+into the verdict, rather than rerunning the command. `report` shows the recorded
+`context_output` beside the verdict in text and JSON. Neither `check` nor `report`
+executes commands. Reset also clears delivered context.
 
 ## Record and reset a review
 
@@ -136,10 +190,10 @@ dresscode report
 `check` requires every enabled, non-retired entry to have a current matching or
 `n-a` verdict, or a current waiver. No entries means a pass. Its status is
 `passed`, `passed-with-waivers`, or `failed`. For each blocker, it names the ID,
-question, state (`unanswered`, `stale`, `context_failed`, or `violated`) and the
+question, state (`unanswered`, `stale`, `context_untrusted`, `context_failed`, or `violated`) and the
 next commands. `check --json` returns `status` and `entries`, each with `id`,
-`question`, `state` and `commands`, without revealing sealed fields. Context
-execution is unavailable; command failures will be produced once it is supported.
+`question`, `state` and `commands`, plus `error` for context blockers, without
+revealing sealed fields.
 
 `waive <id> --reason <text>` requires a non-empty reason and a **current violating
 verdict**. It cannot replace an unanswered, stale, matching or `n-a` answer.

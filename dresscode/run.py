@@ -10,7 +10,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import Literal, NotRequired, TypedDict, cast
 
 from dresscode.entries import Entry
 from dresscode.repo import Repository
@@ -20,11 +20,20 @@ class RunError(ValueError):
     """A run key or its state cannot be read or written."""
 
 
+class ContextRecord(TypedDict):
+    state: str
+    context_output: str
+    error: str
+    command: str
+    fingerprint: str
+
+
 class VerdictRecord(TypedDict):
     verdict: str
     evidence: str
     fingerprint: str
     timestamp: str
+    context_output: NotRequired[str]
 
 
 class HistoryRecord(VerdictRecord):
@@ -42,6 +51,7 @@ class RunState(TypedDict):
     verdicts: dict[str, VerdictRecord]
     history: list[HistoryRecord]
     waivers: dict[str, WaiverRecord]
+    contexts: dict[str, ContextRecord]
 
 
 class RunStore:
@@ -66,7 +76,14 @@ class RunStore:
             raise RunError(f"{self.path}: {error}") from error
         if not _valid_state(document, self.run_key):
             raise RunError(f"{self.path}: invalid run state")
+        document.setdefault("contexts", {})
         return cast(RunState, document)
+
+    def save_contexts(self, contexts: dict[str, ContextRecord]) -> None:
+        with self._lock():
+            state = self._read()
+            state["contexts"].update(contexts)
+            self._write(state)
 
     def record(
         self,
@@ -75,6 +92,7 @@ class RunStore:
         evidence: str,
         fingerprint: str,
         after_save: Callable[[], None] | None = None,
+        context_output: str | None = None,
     ) -> VerdictRecord:
         with self._lock():
             previous_state = self._read()
@@ -88,6 +106,8 @@ class RunStore:
                 "fingerprint": fingerprint,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
+            if context_output is not None:
+                record["context_output"] = context_output
             state["verdicts"][entry.id] = record
             state["waivers"].pop(entry.id, None)
             self._write(state)
@@ -144,6 +164,7 @@ class RunStore:
             state = self._read()
             state["verdicts"] = {}
             state["waivers"] = {}
+            state["contexts"] = {}
             self._write(state)
 
     @contextmanager
@@ -187,11 +208,18 @@ def _copy_state(state: RunState) -> RunState:
         "verdicts": state["verdicts"].copy(),
         "history": state["history"].copy(),
         "waivers": state["waivers"].copy(),
+        "contexts": state["contexts"].copy(),
     }
 
 
 def _empty_state(run_key: str) -> RunState:
-    return {"run_key": run_key, "verdicts": {}, "history": [], "waivers": {}}
+    return {
+        "run_key": run_key,
+        "verdicts": {},
+        "history": [],
+        "waivers": {},
+        "contexts": {},
+    }
 
 
 def _valid_state(document: object, run_key: str) -> bool:
@@ -221,6 +249,16 @@ def _valid_state(document: object, run_key: str) -> bool:
             or not waiver["reason"].strip()
         ):
             return False
+    contexts = document.get("contexts", {})
+    if not isinstance(contexts, dict) or any(
+        not isinstance(identifier, str)
+        or not isinstance(record, dict)
+        or not all(
+            isinstance(record.get(key), str) for key in ContextRecord.__annotations__
+        )
+        for identifier, record in contexts.items()
+    ):
+        return False
     return all(isinstance(identifier, str) for identifier in verdicts)
 
 

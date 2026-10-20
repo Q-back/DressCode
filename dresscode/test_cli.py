@@ -21,22 +21,6 @@ COMMANDS = (
     "trust",
     "waive",
 )
-PLACEHOLDERS = tuple(
-    name
-    for name in COMMANDS
-    if name
-    not in {
-        "add",
-        "answer",
-        "check",
-        "diff",
-        "list",
-        "report",
-        "reset",
-        "retire",
-        "waive",
-    }
-)
 runner = CliRunner()
 
 
@@ -84,28 +68,6 @@ def test_add_help_explains_layers_outside_a_git_worktree(
     assert "global (defaults for all repositories)" in help_text
     assert "[default: repo]" in help_text
     assert set(tmp_path.iterdir()) == {tmp_path / "config", tmp_path / "state"}
-
-
-@pytest.mark.parametrize("command", PLACEHOLDERS)
-def test_placeholders_are_explicitly_unimplemented(command: str) -> None:
-    result = runner.invoke(app, [command])
-
-    assert result.exit_code == 2
-    assert result.stdout == ""
-    assert f"dresscode {command}" in result.stderr
-    assert "not implemented" in result.stderr
-
-
-@pytest.mark.parametrize("command", PLACEHOLDERS)
-def test_placeholder_json_is_a_single_document(command: str) -> None:
-    result = runner.invoke(app, [command, "--json"])
-
-    assert result.exit_code == 2
-    assert result.stderr == ""
-    assert json.loads(result.stdout) == {
-        "command": command,
-        "status": "unimplemented",
-    }
 
 
 @pytest.mark.parametrize("command", COMMANDS)

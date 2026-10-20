@@ -71,6 +71,10 @@ def render(summary: dict[str, Any]) -> None:
         console.print(
             Text.from_ansi(f"{entry['id']}: {entry['question']} [{entry['state']}]")
         )
+        if entry.get("error"):
+            console.print(Text.from_ansi(f"  {entry['error']}"))
+        if "context_output" in entry:
+            console.print(Text.from_ansi(f"  Context: {entry['context_output']}"))
         if entry["verdict"] is not None:
             console.print(
                 Text.from_ansi(

@@ -1,9 +1,10 @@
 """Review verdicts and hand-over gate decisions."""
 
 from shlex import quote
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from dresscode.config import Configuration
+from dresscode.context import required_context
 from dresscode.diff import ScopedDiff, collect
 from dresscode.entries import Entry
 from dresscode.run import RunState, RunStore
@@ -15,6 +16,7 @@ class EntryDecision(TypedDict):
     question: str
     state: str
     commands: list[str]
+    error: NotRequired[str]
 
 
 class GateDecision(TypedDict):
@@ -33,14 +35,28 @@ def review(
         if entry.id in retired:
             continue
         status = entry_state(entry, state, scoped.fingerprint)
-        decisions.append(
-            EntryDecision(
-                id=entry.id,
-                question=entry.question,
-                state=status,
-                commands=fixing_commands(entry.id, status, strict),
-            )
+        context = (
+            required_context(config, entry, state, scoped.fingerprint)
+            if entry.context is not None
+            else None
         )
+        if (
+            context is not None
+            and context["state"] != "ready"
+            and (context["state"] != "unanswered" or status != "stale")
+        ):
+            status = context["state"]
+        decision = EntryDecision(
+            id=entry.id,
+            question=entry.question,
+            state=status,
+            commands=fixing_commands(entry.id, status, strict),
+        )
+        if context is not None and context["state"] != "ready":
+            decision["error"] = context["error"]
+            if context["state"] == "unanswered":
+                decision["commands"].insert(0, "dresscode list")
+        decisions.append(decision)
     blocked = any(item["commands"] for item in decisions)
     waived = any(item["state"] == "waived" for item in decisions)
     status = "failed" if blocked else "passed-with-waivers" if waived else "passed"
@@ -73,4 +89,6 @@ def fixing_commands(identifier: str, state: str, strict: bool) -> list[str]:
         commands.append(f"dresscode waive --reason <text> -- {identifier}")
     if state == "context_failed":
         commands.insert(0, "dresscode list")
+    if state == "context_untrusted":
+        commands[0:0] = ["dresscode trust", "dresscode list"]
     return commands
