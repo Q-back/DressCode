@@ -70,6 +70,24 @@ def test_add_help_explains_layers_outside_a_git_worktree(
     assert set(tmp_path.iterdir()) == {tmp_path / "config", tmp_path / "state"}
 
 
+def test_diff_help_explains_scope_and_base_priority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["diff", "--help"], color=False)
+
+    assert result.exit_code == 0
+    help_text = normalize_help_text(result.stdout)
+    assert "merge base of HEAD and the selected base" in help_text
+    assert "working tree" in help_text
+    assert "committed, staged, unstaged and untracked non-ignored files" in help_text
+    assert (
+        "configured base_ref, origin/HEAD, local main, local master, then the root commit"
+        in help_text
+    )
+    assert "Configured diff exclusions apply" in help_text
+
+
 @pytest.mark.parametrize("command", COMMANDS)
 def test_command_help_is_available(command: str) -> None:
     result = runner.invoke(app, [command, "--help"])

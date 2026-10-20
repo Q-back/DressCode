@@ -316,7 +316,17 @@ def reset(json_output: JsonOutput = False) -> None:
     )
 
 
-@app.command("diff", help="Show the scoped change under review.")
+@app.command(
+    "diff",
+    help=(
+        "Show file counts from the merge base of HEAD and the selected base "
+        "to the working tree. Includes committed, staged, unstaged and untracked "
+        "non-ignored files. Configured diff exclusions apply.\n\n"
+        "Base priority: configured base_ref, origin/HEAD, local main, local master, "
+        "then the root commit. An invalid configured base_ref is an error, "
+        "not a fallback."
+    ),
+)
 def show_diff(
     numstat: Annotated[
         bool, typer.Option(help="Emit tab-separated counts and paths.")
