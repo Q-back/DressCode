@@ -1,10 +1,13 @@
 """Repository- and branch-keyed review state."""
 
+import fcntl
 import hashlib
 import json
 import os
 import subprocess
 import tempfile
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, TypedDict, cast
@@ -45,6 +48,10 @@ class RunStore:
         self.path = home / "dresscode" / "runs" / filename
 
     def read(self) -> RunState:
+        with self._lock():
+            return self._read()
+
+    def _read(self) -> RunState:
         if not self.path.exists():
             return _empty_state(self.run_key)
         try:
@@ -61,20 +68,35 @@ class RunStore:
         verdict: Literal["yes", "no", "n-a"],
         evidence: str,
         fingerprint: str,
+        after_save: Callable[[], None] | None = None,
     ) -> VerdictRecord:
-        state = self.read()
-        previous = state["verdicts"].get(entry.id)
-        if previous is not None:
-            state["history"].append({"id": entry.id, **previous})
-        record: VerdictRecord = {
-            "verdict": verdict,
-            "evidence": evidence,
-            "fingerprint": fingerprint,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-        state["verdicts"][entry.id] = record
-        self._write(state)
-        return record
+        with self._lock():
+            previous_state = self._read()
+            state = _copy_state(previous_state)
+            previous = state["verdicts"].get(entry.id)
+            if previous is not None:
+                state["history"].append({"id": entry.id, **previous})
+            record: VerdictRecord = {
+                "verdict": verdict,
+                "evidence": evidence,
+                "fingerprint": fingerprint,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            state["verdicts"][entry.id] = record
+            self._write(state)
+            if after_save is not None:
+                try:
+                    after_save()
+                except Exception as error:
+                    try:
+                        self._write(previous_state)
+                    except RunError as rollback_error:
+                        raise RunError(
+                            f"{self.path}: cannot restore state after failed answer: "
+                            f"{rollback_error}"
+                        ) from error
+                    raise
+            return record
 
     def stale_verdicts(self, fingerprint: str) -> tuple[str, ...]:
         state = self.read()
@@ -87,10 +109,25 @@ class RunStore:
         )
 
     def reset(self) -> None:
-        state = self.read()
-        state["verdicts"] = {}
-        state["waivers"] = {}
-        self._write(state)
+        with self._lock():
+            state = self._read()
+            state["verdicts"] = {}
+            state["waivers"] = {}
+            self._write(state)
+
+    @contextmanager
+    def _lock(self) -> Generator[None]:
+        lock_path = self.path.with_suffix(f"{self.path.suffix}.lock")
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with lock_path.open("a", encoding="utf-8") as lockfile:
+                fcntl.flock(lockfile.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lockfile.fileno(), fcntl.LOCK_UN)
+        except OSError as error:
+            raise RunError(f"{lock_path}: {error}") from error
 
     def _write(self, state: RunState) -> None:
         temporary: Path | None = None
@@ -111,6 +148,15 @@ class RunStore:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
             raise RunError(f"{self.path}: {error}") from error
+
+
+def _copy_state(state: RunState) -> RunState:
+    return {
+        "run_key": state["run_key"],
+        "verdicts": state["verdicts"].copy(),
+        "history": state["history"].copy(),
+        "waivers": state["waivers"].copy(),
+    }
 
 
 def _empty_state(run_key: str) -> RunState:

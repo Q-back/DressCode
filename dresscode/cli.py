@@ -174,9 +174,14 @@ def answer(
     matched = verdict == "n-a" or verdict == expected
     try:
         record = RunStore(config.repository).record(
-            entry, verdict, evidence.strip(), scoped.fingerprint
+            entry,
+            verdict,
+            evidence.strip(),
+            scoped.fingerprint,
+            after_save=lambda: EntryStore(config.repository).record(
+                entry, answer_value
+            ),
         )
-        EntryStore(config.repository).record(entry, answer_value)
     except (RunError, StoreError) as error:
         fail(str(error), json_output)
     response = {

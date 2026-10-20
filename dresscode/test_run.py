@@ -1,9 +1,15 @@
 import subprocess
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import BrokenBarrierError
+
+import pytest
 
 from dresscode.config import load
+from dresscode.entries import Entry
 from dresscode.repo import discover
-from dresscode.run import RunStore
+from dresscode.run import RunState, RunStore
 
 
 def git(root: Path, *arguments: str) -> str:
@@ -44,6 +50,33 @@ def test_detached_head_uses_short_commit_sha(git_repo: Path) -> None:
     git(git_repo, "switch", "--detach", "HEAD")
 
     assert RunStore(discover(git_repo)).run_key == f"{identity}:detached-{sha}"
+
+
+def test_concurrent_answers_do_not_overwrite_each_other(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = RunStore(discover(git_repo))
+    entries = [Entry(f"question-{index}", "Question?", True) for index in range(8)]
+    writes = threading.Barrier(len(entries))
+    original_write = RunStore._write
+
+    def synchronized_write(instance: RunStore, state: RunState) -> None:
+        try:
+            writes.wait(timeout=0.1)
+        except BrokenBarrierError:
+            pass
+        original_write(instance, state)
+
+    monkeypatch.setattr(RunStore, "_write", synchronized_write)
+    with ThreadPoolExecutor(max_workers=len(entries)) as workers:
+        list(
+            workers.map(
+                lambda entry: store.record(entry, "yes", "Reviewed", "fingerprint"),
+                entries,
+            )
+        )
+
+    assert set(store.read()["verdicts"]) == {entry.id for entry in entries}
 
 
 def test_run_state_is_written_outside_the_repository(

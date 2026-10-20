@@ -9,9 +9,10 @@ from typer.testing import CliRunner
 from dresscode.cli import app
 from dresscode.config import load
 from dresscode.diff import collect
+from dresscode.entries import Entry
 from dresscode.repo import discover
 from dresscode.run import RunStore
-from dresscode.store import Counters, EntryStore
+from dresscode.store import Counters, EntryStore, StoreError
 
 runner = CliRunner()
 RULES = """\
@@ -130,6 +131,29 @@ def test_invalid_answers_exit_two_without_recording(
     assert json.loads(result.stdout)["status"] == "error"
     assert RunStore(discover(git_repo)).read()["verdicts"] == {}
     assert EntryStore(discover(git_repo)).counters("factory") == Counters()
+
+
+def test_counter_failure_rolls_back_the_saved_verdict(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(git_repo)
+    first = answer("factory", "--yes", "--evidence", "Reviewed", "--json")
+    assert first.exit_code == 0, first.output
+    repository = discover(git_repo)
+    run = RunStore(repository)
+    before = run.read()
+    counters = EntryStore(repository).counters("factory")
+
+    def fail_record(self: EntryStore, entry: Entry, verdict: bool | None) -> None:
+        raise StoreError("counter store unavailable")
+
+    monkeypatch.setattr(EntryStore, "record", fail_record)
+    failed = answer("factory", "--no", "--evidence", "Changed answer", "--json")
+
+    assert failed.exit_code == 2
+    assert json.loads(failed.stdout)["error"] == "counter store unavailable"
+    assert run.read() == before
+    assert EntryStore(repository).counters("factory") == counters
 
 
 def test_staleness_uses_scoped_diff_fingerprint(git_repo: Path) -> None:
