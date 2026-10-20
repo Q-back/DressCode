@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** configuration, entry authoring, retirement, sealed question listing and scoped diff inspection work. Review answers and the hand-over gate remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
+**Status:** configuration, entry authoring, retirement, sealed question listing, scoped diff inspection, review answers and run reset work. The hand-over gate, report, trust and waiver commands remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
 
 ## Installation
 
@@ -29,8 +29,8 @@ uv run dresscode --help
 
 | Commands | Availability |
 |---|---|
-| `add`, `retire`, `list`, `diff` | Available; success exits `0`, errors exit `2` |
-| `answer`, `check`, `report`, `reset`, `trust`, `waive` | Unavailable placeholders; exit `2` |
+| `add`, `retire`, `list`, `diff`, `answer`, `reset` | Available; success exits `0`, errors exit `2` |
+| `check`, `report`, `trust`, `waive` | Unavailable placeholders; exit `2` |
 
 Every command supports `--help` (exit `0`) and `--json`. Placeholders validate the repository and configuration, then print an unavailable message to stderr and exit `2`. With `--json`, they emit a single JSON document on stdout instead, still exiting `2`:
 
@@ -98,7 +98,36 @@ uv run dresscode retire test-factory --reason "now an ast-grep rule"
 
 `retire <id> [--reason <text>]` removes an entry from future listings for this repository, across branches and linked worktrees. The reason is optional and defaults to empty. Retirement preserves the entry snapshot, reason and timestamp in `$XDG_STATE_HOME/dresscode/entries.sqlite3` (default state home: `~/.local/state`). Existing counters are kept, and configuration files are not modified. Unknown or already-retired IDs exit `2`.
 
-The same SQLite store holds per-repository, per-entry counters: `asked`, `violated`, `n_a` and `last_violated`. Counter writes are independent of configuration permissions. Retirement history is readable in the `retired` table; its `entry` column contains the original entry as JSON. The `answer` command is not available yet, so no CLI verdict updates these counters yet.
+The same SQLite store holds per-repository, per-entry counters: `asked`, `violated`, `n_a` and `last_violated`. Counter writes are independent of configuration permissions. Retirement history is readable in the `retired` table; its `entry` column contains the original entry as JSON. Each recorded answer increments `asked`; violations and `n-a` answers update their respective counters.
+
+## Record and reset a review
+
+Give the listed question to a fresh-context reviewer, then record its answer with
+non-empty evidence:
+
+```sh
+dresscode list
+dresscode answer test-factory --yes --evidence "Reused the shared fixture."
+dresscode answer python-only-rule --n-a --evidence "This change touches no Python."
+```
+
+Choose exactly one of `--yes`, `--no` or `--n-a`. The response gives the expected
+answer and reveal only after the verdict and evidence have been saved. An `n-a`
+answer still needs evidence and is treated as satisfied by the gate. Answering an
+ID again replaces its current verdict and preserves the previous answer in run
+history.
+
+Run state is JSON in `$XDG_STATE_HOME/dresscode/runs/` (default:
+`~/.local/state/dresscode/runs/`). Each repository and branch has a separate run;
+detached checkouts use `detached-<short-sha>`. Every answer records the current
+diff fingerprint and timestamp. A scoped change makes the verdict stale and
+requires a new answer once `dresscode check` is available. Excluded changes do
+not stale it. `dresscode reset` clears current verdicts and waivers for this run
+without changing counters; past re-answers remain in history.
+
+The project `AGENTS.md` requires a fresh-context reviewer that did not see the
+implementation transcript. DressCode records the verdict but does not verify
+reviewer independence.
 
 ## Inspect the current diff
 

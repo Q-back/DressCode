@@ -42,11 +42,11 @@ Submodule policy: the user selected explicit dirty-submodule rejection for v0. C
 
 ## 4. Commit: Record diff-bound verdicts
 
-- [ ] 4.1 Implement the run key (repo identity plus branch, `detached-<sha>` fallback) and JSON run state under `$XDG_STATE_HOME/dresscode/runs/`; assert in tests that the repository stays untouched.
-- [ ] 4.2 Implement `dresscode answer` with required evidence, fingerprint pinning, timestamps, counter updates, reveal in the response, re-answer replacing and history kept; `--n-a` never failing the gate.
-- [ ] 4.3 Implement staleness against the current fingerprint, and `dresscode reset` clearing the run's verdicts and waivers while preserving counters.
-- [ ] 4.4 Tests: branch switch isolating runs; detached HEAD; first answer recorded; reveal returned only after recording; empty evidence and unknown id exiting `2`; re-answer history; `n-a` counters; scoped edit staling a verdict while an excluded edit does not; reset clearing verdicts and keeping counters.
-- [ ] 4.5 Document `list` → `answer`, evidence, reveal, run state, staleness and reset. Document fresh-context review as an `AGENTS.md` or harness instruction.
+- [x] 4.1 Implement the run key (repo identity plus branch, `detached-<sha>` fallback) and JSON run state under `$XDG_STATE_HOME/dresscode/runs/`; assert in tests that the repository stays untouched.
+- [x] 4.2 Implement `dresscode answer` with required evidence, fingerprint pinning, timestamps, counter updates, reveal in the response, re-answer replacing and history kept; `--n-a` never failing the gate.
+- [x] 4.3 Implement staleness against the current fingerprint, and `dresscode reset` clearing the run's verdicts and waivers while preserving counters.
+- [x] 4.4 Tests: branch switch isolating runs; detached HEAD; first answer recorded; reveal returned only after recording; empty evidence and unknown id exiting `2`; re-answer history; `n-a` counters; scoped edit staling a verdict while an excluded edit does not; reset clearing verdicts and keeping counters.
+- [x] 4.5 Document `list` → `answer`, evidence, reveal, run state, staleness and reset. Document fresh-context review as an `AGENTS.md` or harness instruction.
 
 ## 5. Commit: Gate current verdicts and documented waivers
 

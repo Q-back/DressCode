@@ -11,6 +11,7 @@ from dresscode.config import Configuration, ConfigurationError, load
 from dresscode.diff import DiffError, collect
 from dresscode.entries import Entry
 from dresscode.repo import Repository, RepositoryError, discover
+from dresscode.run import RunError, RunStore
 from dresscode.store import EntryStore, StoreError
 
 JsonOutput = Annotated[
@@ -132,6 +133,89 @@ def list_entries(json_output: JsonOutput = False) -> None:
     )
 
 
+@app.command("answer", help="Record a verdict with evidence.")
+def answer(
+    identifier: str,
+    yes: Annotated[bool, typer.Option("--yes", help="Answer yes.")] = False,
+    no: Annotated[bool, typer.Option("--no", help="Answer no.")] = False,
+    not_applicable: Annotated[
+        bool, typer.Option("--n-a", help="Mark the question not applicable.")
+    ] = False,
+    evidence: Annotated[str, typer.Option("--evidence")] = "",
+    json_output: JsonOutput = False,
+) -> None:
+    config = configuration(json_output)
+    selected = sum((yes, no, not_applicable))
+    if selected != 1:
+        fail("Choose exactly one of --yes, --no or --n-a", json_output)
+    if not evidence.strip():
+        fail("--evidence must not be empty", json_output)
+    try:
+        retired = EntryStore(config.repository).retirements()
+    except StoreError as error:
+        fail(str(error), json_output)
+    entry = next(
+        (
+            item
+            for item in config.entries
+            if item.id == identifier and identifier not in retired
+        ),
+        None,
+    )
+    if entry is None:
+        fail(f"Unknown entry: {identifier}", json_output)
+    try:
+        scoped = collect(config)
+    except DiffError as error:
+        fail(str(error), json_output)
+    verdict = "n-a" if not_applicable else "yes" if yes else "no"
+    answer_value = None if not_applicable else yes
+    expected = "yes" if entry.expects else "no"
+    matched = verdict == "n-a" or verdict == expected
+    try:
+        record = RunStore(config.repository).record(
+            entry, verdict, evidence.strip(), scoped.fingerprint
+        )
+        EntryStore(config.repository).record(entry, answer_value)
+    except (RunError, StoreError) as error:
+        fail(str(error), json_output)
+    response = {
+        "status": "recorded",
+        "id": identifier,
+        "verdict": verdict,
+        "expected": expected,
+        "matched": matched,
+        "evidence": evidence.strip(),
+        "fingerprint": scoped.fingerprint,
+        "timestamp": record["timestamp"],
+        "reveal": entry.reveal,
+    }
+    if json_output:
+        typer.echo(json.dumps(response))
+        return
+    typer.echo(
+        f"Recorded {identifier}: {verdict} (expected {expected}; "
+        f"matched: {'yes' if matched else 'no'})."
+    )
+    if entry.reveal:
+        typer.echo(f"Reveal: {entry.reveal}")
+
+
+@app.command("reset", help="Clear the current review run.")
+def reset(json_output: JsonOutput = False) -> None:
+    config = configuration(json_output)
+    try:
+        run = RunStore(config.repository)
+        run.reset()
+    except RunError as error:
+        fail(str(error), json_output)
+    typer.echo(
+        json.dumps({"status": "reset", "run_key": run.run_key})
+        if json_output
+        else f"Reset review run {run.run_key}"
+    )
+
+
 @app.command("diff", help="Show the scoped change under review.")
 def show_diff(
     numstat: Annotated[
@@ -169,10 +253,8 @@ def show_diff(
 
 
 for name, description in {
-    "answer": "Record a verdict with evidence.",
     "check": "Check whether the review passes.",
     "report": "Summarize the review.",
-    "reset": "Clear the current review.",
     "trust": "Trust repository-local context commands.",
     "waive": "Document a violation that may ship.",
 }.items():
