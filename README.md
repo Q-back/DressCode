@@ -2,21 +2,19 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** question authoring, sealed listing with trusted context evidence, scoped diffs, review answers, waivers, the hand-over gate, reports and run reset work.
-
 ## Installation
 
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.14. From this checkout:
 
 ```sh
-uv tool install --editable .
+uv tool install .
 dresscode --help
 ```
 
-Ensure uv's tool binary directory is on your `PATH` (`uv tool update-shell` can set it up). The editable installation picks up source changes on the next run; keep this checkout in place. Reinstall after changing dependencies or CLI entry points:
+Ensure uv's tool binary directory is on your `PATH` (`uv tool update-shell` can set it up). After updating this checkout, rebuild and replace the installed tool:
 
 ```sh
-uv tool install --force --editable .
+uv tool install --force --refresh .
 ```
 
 Without a tool installation, run from the checkout:
@@ -25,12 +23,15 @@ Without a tool installation, run from the checkout:
 uv run dresscode --help
 ```
 
-## Command availability
+## Usage
 
-| Commands | Availability |
-|---|---|
-| `add`, `retire`, `list`, `diff`, `answer`, `waive`, `report`, `reset`, `trust` | Available; success exits `0`, errors exit `2` |
-| `check [--strict]` | Available; exits `0` when green, `1` when blocked, `2` on errors |
+Run the installed `dresscode` command from the target Git repository. Configure
+questions using `dresscode add` or the TOML layers below; no questions are seeded.
+
+```text
+implement → list → fresh-context reviewer → answer → check → report
+                                             ↘ waive ↗
+```
 
 Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`.
 
@@ -75,14 +76,14 @@ Context commands execute during `list`, subject to the trust policy below. Loadi
 From the target repository:
 
 ```sh
-uv run dresscode add test-factory \
+dresscode add test-factory \
   --question "Did you reuse an existing test factory?" \
   --expects true \
   --reveal "Prefer the existing factory over a hand-rolled mock."
-uv run dresscode list
-uv run dresscode list --json
+dresscode list
+dresscode list --json
 # {"entries": [{"id": "test-factory", "question": "Did you reuse an existing test factory?"}]}
-uv run dresscode retire test-factory --reason "now an ast-grep rule"
+dresscode retire test-factory --reason "now an ast-grep rule"
 ```
 
 `add <id>` requires `--question` and `--expects true|false`. Optional flags are `--reveal`, `--context`, `--layer repo|private|global` (default `repo`) and `--json`. It appends a definition without dropping comments or unrelated TOML settings. With `.dresscode/`, it uses the last existing TOML file in filename order, or `rules.toml` if the directory is empty. Otherwise it writes `.dresscode.toml`. Global and private destinations are the files in the configuration table above. Layer precedence still applies to repeated IDs.
@@ -222,6 +223,26 @@ remain unrestricted, and DressCode does not install or require Git hooks.
 A green gate means the recorded answers satisfy the current entries; it does not
 prove reviewer independence. Strict mode adds a no-waiver requirement.
 
+### Harness instructions
+
+Add this to a target project's `AGENTS.md` or equivalent harness instructions:
+
+```text
+Before declaring a coding task done, request a fresh-context reviewer who has
+not seen the implementation transcript. Give it the final cumulative diff
+(including uncommitted work) and the questions from dresscode list --json,
+not the sealed expectations or reveals. Record every answer with evidence
+using dresscode answer; use n-a with evidence when a question does not apply.
+Resolve violations or record an explicitly accepted waiver with a reason.
+Require dresscode check to exit 0 before hand-over, and show dresscode report.
+If the reviewed diff changes, obtain current answers before checking again.
+Intermediate commits do not need current DressCode verdicts.
+A passing check records answers; it does not prove reviewer independence.
+```
+
+Use `dresscode check --strict` instead when the project must reject waivers.
+DressCode does not launch the reviewer; the agent or harness owns that step.
+
 ## Inspect the current diff
 
 ```sh
@@ -295,7 +316,23 @@ uv run ruff format --check .
 uv run ty check
 ```
 
-Tests live alongside the package modules. Each test gets temporary XDG config and state directories; Git tests use a real temporary repository, not the checkout.
+For an editable tool installation, use `uv tool install --editable .` and keep
+this checkout in place. Source edits take effect on the next invocation;
+reinstall with `uv tool install --force --editable .` after changing dependencies
+or entry points.
+
+Tests live alongside the package modules. Each test gets temporary XDG config and state directories; Git tests use a real temporary repository, not the checkout. End-to-end tests invoke the CLI in separate processes and exercise reviews with and without waivers.
+
+The optional development hooks run Ruff formatting, Ruff linting and `ty` only:
+
+```sh
+uv run pre-commit install
+uv run pre-commit run --all-files
+```
+
+These deterministic checks do not run `dresscode check` or require review answers
+for intermediate commits. Installing these development hooks is optional and
+separate from using DressCode as a hand-over gate.
 
 GitHub Actions runs these checks on Ubuntu for every push and pull request, using the Python version in `.python-version` and locked dependencies from `uv.lock`. You can also start the `CI` workflow manually from the Actions tab. To block merges when checks fail, require `Python checks` in the branch protection rule or ruleset for your default branch.
 
