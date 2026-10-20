@@ -68,9 +68,9 @@ def fixing_commands(identifier: str, state: str, strict: bool) -> list[str]:
     if state == "passed" or (state == "waived" and not strict):
         return []
     identifier = quote(identifier)
-    commands = [f"dresscode answer {identifier} --yes|--no|--n-a --evidence <text>"]
+    commands = [f"dresscode answer --yes|--no|--n-a --evidence <text> -- {identifier}"]
     if state == "violated":
-        commands.append(f"dresscode waive {identifier} --reason <text>")
+        commands.append(f"dresscode waive --reason <text> -- {identifier}")
     if state == "context_failed":
         commands.insert(0, "dresscode list")
     return commands

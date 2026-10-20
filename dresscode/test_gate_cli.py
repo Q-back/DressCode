@@ -1,4 +1,5 @@
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,7 @@ from typer.testing import CliRunner
 
 from dresscode.cli import app
 from dresscode.repo import discover
+from dresscode.report import render
 from dresscode.run import RunStore
 
 runner = CliRunner()
@@ -27,6 +29,55 @@ def invoke(*arguments: str):
 def record(verdict: str = "--yes") -> None:
     result = invoke("answer", "factory", verdict, "--evidence", "Reviewed setup")
     assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    "identifier", ["--factory", "-factory", "factory with 'quotes'"]
+)
+def test_suggested_commands_work_with_option_like_and_quoted_ids(
+    git_repo: Path, identifier: str
+) -> None:
+    rules = git_repo / ".dresscode.toml"
+    rules.write_text(
+        rules.read_text().replace('id = "factory"', f"id = {json.dumps(identifier)}")
+    )
+
+    def run_suggestion(command: str, verdict: str = "--no") -> None:
+        filled = command.replace("--yes|--no|--n-a", verdict).replace(
+            "<text>", "Reviewed"
+        )
+        result = invoke(*shlex.split(filled)[1:])
+        assert result.exit_code == 0, result.output
+
+    unanswered = json.loads(invoke("check", "--json").stdout)
+    run_suggestion(unanswered["entries"][0]["commands"][0])
+    violated = json.loads(invoke("check", "--json").stdout)
+    assert violated["entries"][0]["state"] == "violated"
+    run_suggestion(violated["entries"][0]["commands"][1])
+    assert invoke("check").exit_code == 0
+    strict = json.loads(invoke("check", "--strict", "--json").stdout)
+    run_suggestion(strict["entries"][0]["commands"][0], "--yes")
+    assert invoke("check", "--strict").exit_code == 0
+
+
+def test_redirected_report_strips_embedded_ansi_but_preserves_json(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    evidence = "\x1b[31mReviewed setup\x1b[0m"
+    reason = "\x1b[32mAccepted tradeoff\x1b[0m"
+    assert invoke("answer", "factory", "--no", "--evidence", evidence).exit_code == 0
+    assert invoke("waive", "factory", "--reason", reason).exit_code == 0
+    summary = json.loads(invoke("report", "--json").stdout)
+    assert summary["entries"][0]["evidence"] == evidence
+    assert summary["waivers"][0]["reason"] == reason
+
+    render(summary)
+    output = capsys.readouterr().out
+    assert "\x1b[" not in output
+    assert "Reviewed setup" in output
+    assert "Accepted tradeoff" in output
+    assert summary["entries"][0]["evidence"] == evidence
+    assert summary["waivers"][0]["reason"] == reason
 
 
 @pytest.mark.parametrize("verdict", ["--yes", "--n-a"])
@@ -73,10 +124,13 @@ def test_blockers_name_question_state_and_fix(git_repo: Path, state: str) -> Non
     assert entry["id"] == "factory"
     assert entry["question"] == "Reuse the factory?"
     assert entry["state"] == state
-    assert any("dresscode answer factory" in command for command in entry["commands"])
+    assert any(
+        command.startswith("dresscode answer ") and command.endswith("-- factory")
+        for command in entry["commands"]
+    )
     if state == "violated":
         assert any(
-            "dresscode waive factory --reason" in command
+            command == "dresscode waive --reason <text> -- factory"
             for command in entry["commands"]
         )
     plain = invoke("check")

@@ -4,6 +4,7 @@ import sys
 from typing import Any
 
 from rich.console import Console
+from rich.text import Text
 
 from dresscode.config import Configuration
 from dresscode.diff import ScopedDiff
@@ -62,28 +63,26 @@ def render(summary: dict[str, Any]) -> None:
     console.print(summary["status"], style=style, markup=False)
     diff = summary["diff"]
     console.print(
-        f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_ref']})",
-        markup=False,
-        highlight=False,
+        Text.from_ansi(
+            f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_ref']})"
+        )
     )
     for entry in summary["entries"]:
         console.print(
-            f"{entry['id']}: {entry['question']} [{entry['state']}]",
-            markup=False,
-            highlight=False,
+            Text.from_ansi(f"{entry['id']}: {entry['question']} [{entry['state']}]")
         )
         if entry["verdict"] is not None:
             console.print(
-                f"  Verdict: {entry['verdict']}\n  Evidence: {entry['evidence']}\n"
-                f"  Reveal: {entry['reveal']}",
-                markup=False,
-                highlight=False,
+                Text.from_ansi(
+                    f"  Verdict: {entry['verdict']}\n  Evidence: {entry['evidence']}\n"
+                    f"  Reveal: {entry['reveal']}"
+                )
             )
     if summary["waivers"]:
         console.print("Waivers", style="yellow")
         for waiver in summary["waivers"]:
             console.print(
-                f"  {waiver['id']} [{waiver['state']}]: {waiver['reason']}",
-                markup=False,
-                highlight=False,
+                Text.from_ansi(
+                    f"  {waiver['id']} [{waiver['state']}]: {waiver['reason']}"
+                )
             )
