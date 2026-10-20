@@ -2,7 +2,7 @@
 
 DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
 
-**Status:** configuration, entry authoring, retirement, sealed question listing, scoped diff inspection, review answers and run reset work. The hand-over gate, report, trust and waiver commands remain unavailable and exit `2`. The intended behavior is specified in `openspec/changes/add-dresscode-cli/`.
+**Status:** question authoring, sealed listing, scoped diffs, review answers, waivers, the hand-over gate, reports and run reset work. Context commands are not executed, and `trust` remains unavailable (exit `2`).
 
 ## Installation
 
@@ -29,17 +29,11 @@ uv run dresscode --help
 
 | Commands | Availability |
 |---|---|
-| `add`, `retire`, `list`, `diff`, `answer`, `reset` | Available; success exits `0`, errors exit `2` |
-| `check`, `report`, `trust`, `waive` | Unavailable placeholders; exit `2` |
+| `add`, `retire`, `list`, `diff`, `answer`, `waive`, `report`, `reset` | Available; success exits `0`, errors exit `2` |
+| `check [--strict]` | Available; exits `0` when green, `1` when blocked, `2` on errors |
+| `trust` | Unavailable placeholder; exit `2` |
 
-Every command supports `--help` (exit `0`) and `--json`. Placeholders validate the repository and configuration, then print an unavailable message to stderr and exit `2`. With `--json`, they emit a single JSON document on stdout instead, still exiting `2`:
-
-```sh
-uv run dresscode check --json
-# {"command": "check", "status": "unimplemented"}
-```
-
-Do not use `dresscode check` as a hand-over gate until it is implemented.
+Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`. The `trust` placeholder validates configuration, then reports `unimplemented` and exits `2`.
 
 ## Repository identity
 
@@ -121,13 +115,56 @@ Run state is JSON in `$XDG_STATE_HOME/dresscode/runs/` (default:
 `~/.local/state/dresscode/runs/`). Each repository and branch has a separate run;
 detached checkouts use `detached-<short-sha>`. Every answer records the current
 diff fingerprint and timestamp. A scoped change makes the verdict stale and
-requires a new answer once `dresscode check` is available. Excluded changes do
+requires a new answer before `dresscode check` can pass. Excluded changes do
 not stale it. `dresscode reset` clears current verdicts and waivers for this run
 without changing counters; past re-answers remain in history.
 
 The project `AGENTS.md` requires a fresh-context reviewer that did not see the
 implementation transcript. DressCode records the verdict but does not verify
 reviewer independence.
+
+## Gate hand-over and report the result
+
+```sh
+dresscode check
+dresscode waive test-factory --reason "Existing setup cannot use the shared fixture."
+dresscode check --json
+dresscode check --strict
+dresscode report
+```
+
+`check` requires every enabled, non-retired entry to have a current matching or
+`n-a` verdict, or a current waiver. No entries means a pass. Its status is
+`passed`, `passed-with-waivers`, or `failed`. For each blocker, it names the ID,
+question, state (`unanswered`, `stale`, `context_failed`, or `violated`) and the
+next commands. `check --json` returns `status` and `entries`, each with `id`,
+`question`, `state` and `commands`, without revealing sealed fields. Context
+execution is unavailable; command failures will be produced once it is supported.
+
+`waive <id> --reason <text>` requires a non-empty reason and a **current violating
+verdict**. It cannot replace an unanswered, stale, matching or `n-a` answer.
+The reason, timestamp and diff fingerprint are stored in the run. A scoped edit
+expires the waiver; re-answering removes it, and reset clears all current waivers.
+`check --strict` performs the same checks and additionally fails on waivers,
+listing them instead of accepting a documented violation.
+
+`report` shows overall status, added/removed lines, questions, verdicts, evidence
+and reveals for answered entries, with waivers and their reasons in a separate
+section. Stale waivers are labeled. Redirected output has no ANSI colors.
+`report --json` includes `status`, `run_key`, `diff`, `entries` and `waivers`.
+Reporting a blocked run succeeds; use `check` to enforce the gate.
+
+| Exit | Meaning |
+|---|---|
+| `0` | Success; for `check`, all entries pass or have accepted waivers |
+| `1` | `check` needs action; strict mode also rejects waivers |
+| `2` | Usage, configuration, state or environment error |
+
+Require a fresh-context reviewer and a successful `dresscode check` **before
+final task hand-over**, through `AGENTS.md` or the harness. Intermediate commits
+remain unrestricted, and DressCode does not install or require Git hooks.
+A green gate means the recorded answers satisfy the current entries; it does not
+prove reviewer independence. Strict mode adds a no-waiver requirement.
 
 ## Inspect the current diff
 
@@ -206,7 +243,7 @@ Tests live alongside the package modules. Each test gets temporary XDG config an
 
 GitHub Actions runs these checks on Ubuntu for every push and pull request, using the Python version in `.python-version` and locked dependencies from `uv.lock`. You can also start the `CI` workflow manually from the Actions tab. To block merges when checks fail, require `Python checks` in the branch protection rule or ruleset for your default branch.
 
-## Planned behavior and boundaries
+## Boundaries
 
 DressCode is a pure CLI over a state store plus git. It never spawns agents, never calls a model, never edits code.
 

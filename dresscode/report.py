@@ -1,1 +1,89 @@
 """Human-readable review summaries."""
+
+import sys
+from typing import Any
+
+from rich.console import Console
+
+from dresscode.config import Configuration
+from dresscode.diff import ScopedDiff
+from dresscode.gate import GateDecision
+from dresscode.run import RunState
+
+
+def summarize(
+    config: Configuration,
+    scoped: ScopedDiff,
+    state: RunState,
+    decision: GateDecision,
+) -> dict[str, Any]:
+    entries = []
+    waivers = []
+    definitions = {entry.id: entry for entry in config.entries}
+    for item in decision["entries"]:
+        identifier = item["id"]
+        record = state["verdicts"].get(identifier)
+        detail = {**item, "verdict": None}
+        if record is not None:
+            entry = definitions[identifier]
+            detail.update(
+                **record,
+                expected="yes" if entry.expects else "no",
+                reveal=entry.reveal,
+            )
+        entries.append(detail)
+        waiver = state["waivers"].get(identifier)
+        if waiver is not None:
+            waivers.append(
+                {
+                    "id": identifier,
+                    **waiver,
+                    "state": "current" if item["state"] == "waived" else "stale",
+                }
+            )
+    return {
+        "status": decision["status"],
+        "run_key": state["run_key"],
+        "diff": {
+            "base_ref": scoped.base_ref,
+            "merge_base": scoped.merge_base,
+            "fingerprint": scoped.fingerprint,
+            "added": scoped.added,
+            "removed": scoped.removed,
+        },
+        "entries": entries,
+        "waivers": waivers,
+    }
+
+
+def render(summary: dict[str, Any]) -> None:
+    console = Console(color_system="auto" if sys.stdout.isatty() else None)
+    style = "red" if summary["status"] == "failed" else "green"
+    console.print(summary["status"], style=style, markup=False)
+    diff = summary["diff"]
+    console.print(
+        f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_ref']})",
+        markup=False,
+        highlight=False,
+    )
+    for entry in summary["entries"]:
+        console.print(
+            f"{entry['id']}: {entry['question']} [{entry['state']}]",
+            markup=False,
+            highlight=False,
+        )
+        if entry["verdict"] is not None:
+            console.print(
+                f"  Verdict: {entry['verdict']}\n  Evidence: {entry['evidence']}\n"
+                f"  Reveal: {entry['reveal']}",
+                markup=False,
+                highlight=False,
+            )
+    if summary["waivers"]:
+        console.print("Waivers", style="yellow")
+        for waiver in summary["waivers"]:
+            console.print(
+                f"  {waiver['id']} [{waiver['state']}]: {waiver['reason']}",
+                markup=False,
+                highlight=False,
+            )

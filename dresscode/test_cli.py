@@ -24,7 +24,18 @@ COMMANDS = (
 PLACEHOLDERS = tuple(
     name
     for name in COMMANDS
-    if name not in {"add", "answer", "diff", "list", "reset", "retire"}
+    if name
+    not in {
+        "add",
+        "answer",
+        "check",
+        "diff",
+        "list",
+        "report",
+        "reset",
+        "retire",
+        "waive",
+    }
 )
 runner = CliRunner()
 

@@ -50,12 +50,12 @@ Submodule policy: the user selected explicit dirty-submodule rejection for v0. C
 
 ## 5. Commit: Gate current verdicts and documented waivers
 
-- [ ] 5.1 Implement `dresscode check`: green condition, blocking states (`unanswered`, `stale`, `context_failed`, `violated`), the fixing command per entry, exit codes `0`/`1`/`2`, and `--json`.
-- [ ] 5.2 Implement `dresscode waive`: only over a violating current verdict, reason required, reason/timestamp/fingerprint stored, status `passed-with-waivers`, staleness like a verdict.
-- [ ] 5.3 Implement `check --strict` applying the normal gate checks and additionally failing on waivers.
-- [ ] 5.4 Implement `dresscode report` with `rich`: status, diff size, per-entry verdict with evidence and reveal, waivers in their own section, no ANSI when not a TTY; `report --json` includes the same summary.
-- [ ] 5.5 Tests: green run; empty entry list; each blocking state naming its command; usage error exiting `2` while a failing gate exits `1`; waiver flipping the gate and `--strict` flipping it back; waiver over a satisfied entry refused; stale waivers blocking; reset clearing waivers; both gate modes green without waivers; report content, JSON summary and non-TTY plainness.
-- [ ] 5.6 Document `check`, `waive`, `check --strict`, `report` and exit codes. The gate runs before final task hand-over, not before intermediate commits, and does not install or require Git hooks. A green gate means current recorded answers satisfy the entries; strict mode adds a no-waiver requirement.
+- [x] 5.1 Implement `dresscode check`: green condition, blocking states (`unanswered`, `stale`, `context_failed`, `violated`), the fixing command per entry, exit codes `0`/`1`/`2`, and `--json`.
+- [x] 5.2 Implement `dresscode waive`: only over a violating current verdict, reason required, reason/timestamp/fingerprint stored, status `passed-with-waivers`, staleness like a verdict.
+- [x] 5.3 Implement `check --strict` applying the normal gate checks and additionally failing on waivers.
+- [x] 5.4 Implement `dresscode report` with `rich`: status, diff size, per-entry verdict with evidence and reveal, waivers in their own section, no ANSI when not a TTY; `report --json` includes the same summary.
+- [x] 5.5 Tests: green run; empty entry list; each blocking state naming its command; usage error exiting `2` while a failing gate exits `1`; waiver flipping the gate and `--strict` flipping it back; waiver over a satisfied entry refused; stale waivers blocking; reset clearing waivers; both gate modes green without waivers; report content, JSON summary and non-TTY plainness.
+- [x] 5.6 Document `check`, `waive`, `check --strict`, `report` and exit codes. The gate runs before final task hand-over, not before intermediate commits, and does not install or require Git hooks. A green gate means current recorded answers satisfy the entries; strict mode adds a no-waiver requirement.
 
 ## 6. Commit: Supply trusted context evidence end to end
 

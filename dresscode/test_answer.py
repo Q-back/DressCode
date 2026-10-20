@@ -184,7 +184,11 @@ def test_reset_clears_current_answers_and_waivers_but_preserves_counters(
     run = RunStore(repository)
     state: dict[str, Any] = json.loads(run.path.read_text())
     history_before = state["history"]
-    state["waivers"]["factory"] = {"reason": "Accepted"}
+    state["waivers"]["factory"] = {
+        "reason": "Accepted",
+        "fingerprint": state["verdicts"]["factory"]["fingerprint"],
+        "timestamp": state["verdicts"]["factory"]["timestamp"],
+    }
     run.path.write_text(json.dumps(state))
 
     reset = runner.invoke(app, ["reset", "--json"])

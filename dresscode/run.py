@@ -10,7 +10,7 @@ from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, TypedDict, cast
+from typing import Literal, TypedDict, cast
 
 from dresscode.entries import Entry
 from dresscode.repo import Repository
@@ -31,11 +31,17 @@ class HistoryRecord(VerdictRecord):
     id: str
 
 
+class WaiverRecord(TypedDict):
+    reason: str
+    fingerprint: str
+    timestamp: str
+
+
 class RunState(TypedDict):
     run_key: str
     verdicts: dict[str, VerdictRecord]
     history: list[HistoryRecord]
-    waivers: dict[str, dict[str, Any]]
+    waivers: dict[str, WaiverRecord]
 
 
 class RunStore:
@@ -83,6 +89,7 @@ class RunStore:
                 "timestamp": datetime.now(UTC).isoformat(),
             }
             state["verdicts"][entry.id] = record
+            state["waivers"].pop(entry.id, None)
             self._write(state)
             if after_save is not None:
                 try:
@@ -97,6 +104,30 @@ class RunStore:
                         ) from error
                     raise
             return record
+
+    def waive(self, entry: Entry, reason: str, fingerprint: str) -> WaiverRecord:
+        if not reason.strip():
+            raise RunError("--reason must not be empty")
+        with self._lock():
+            state = self._read()
+            verdict = state["verdicts"].get(entry.id)
+            violating = "no" if entry.expects else "yes"
+            if (
+                verdict is None
+                or verdict["fingerprint"] != fingerprint
+                or verdict["verdict"] != violating
+            ):
+                raise RunError(
+                    f"{entry.id}: waiver requires a current violating verdict"
+                )
+            waiver: WaiverRecord = {
+                "reason": reason.strip(),
+                "fingerprint": fingerprint,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+            state["waivers"][entry.id] = waiver
+            self._write(state)
+            return waiver
 
     def stale_verdicts(self, fingerprint: str) -> tuple[str, ...]:
         state = self.read()
@@ -177,6 +208,17 @@ def _valid_state(document: object, run_key: str) -> bool:
         if not isinstance(record, dict) or not all(
             isinstance(record.get(field), str)
             for field in ("verdict", "evidence", "fingerprint", "timestamp")
+        ):
+            return False
+    for identifier, waiver in waivers.items():
+        if (
+            not isinstance(identifier, str)
+            or not isinstance(waiver, dict)
+            or not all(
+                isinstance(waiver.get(field), str)
+                for field in ("reason", "fingerprint", "timestamp")
+            )
+            or not waiver["reason"].strip()
         ):
             return False
     return all(isinstance(identifier, str) for identifier in verdicts)

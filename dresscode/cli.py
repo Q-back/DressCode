@@ -10,7 +10,9 @@ from dresscode.authoring import append_entry
 from dresscode.config import Configuration, ConfigurationError, load
 from dresscode.diff import DiffError, collect
 from dresscode.entries import Entry
+from dresscode.gate import review
 from dresscode.repo import Repository, RepositoryError, discover
+from dresscode.report import render, summarize
 from dresscode.run import RunError, RunStore
 from dresscode.store import EntryStore, StoreError
 
@@ -206,6 +208,74 @@ def answer(
         typer.echo(f"Reveal: {entry.reveal}")
 
 
+@app.command("check", help="Gate hand-over on current verdicts and waivers.")
+def check(
+    strict: Annotated[bool, typer.Option(help="Reject waivers too.")] = False,
+    json_output: JsonOutput = False,
+) -> None:
+    config = configuration(json_output)
+    try:
+        _, state, decision = review(config, strict)
+    except (DiffError, RunError, StoreError) as error:
+        fail(str(error), json_output)
+    if json_output:
+        typer.echo(json.dumps(decision))
+    else:
+        typer.echo(decision["status"])
+        for entry in decision["entries"]:
+            if entry["commands"]:
+                typer.echo(f"{entry['id']}: {entry['question']} [{entry['state']}]")
+                if entry["state"] == "waived":
+                    typer.echo(f"  Waiver: {state['waivers'][entry['id']]['reason']}")
+                for command in entry["commands"]:
+                    typer.echo(f"  {command}")
+    raise typer.Exit(code=1 if decision["status"] == "failed" else 0)
+
+
+@app.command("waive", help="Document a current violation that may ship.")
+def waive(
+    identifier: str,
+    reason: Annotated[str, typer.Option("--reason")] = "",
+    json_output: JsonOutput = False,
+) -> None:
+    config = configuration(json_output)
+    try:
+        retired = EntryStore(config.repository).retirements()
+        entry = next(
+            (
+                item
+                for item in config.entries
+                if item.id == identifier and item.id not in retired
+            ),
+            None,
+        )
+        if entry is None:
+            fail(f"Unknown entry: {identifier}", json_output)
+        scoped = collect(config)
+        waiver = RunStore(config.repository).waive(entry, reason, scoped.fingerprint)
+    except (DiffError, RunError, StoreError) as error:
+        fail(str(error), json_output)
+    typer.echo(
+        json.dumps({"status": "waived", "id": identifier, **waiver})
+        if json_output
+        else f"Waived {identifier}: {waiver['reason']}"
+    )
+
+
+@app.command("report", help="Summarize verdicts, evidence and waivers.")
+def report(json_output: JsonOutput = False) -> None:
+    config = configuration(json_output)
+    try:
+        scoped, state, decision = review(config)
+    except (DiffError, RunError, StoreError) as error:
+        fail(str(error), json_output)
+    summary = summarize(config, scoped, state, decision)
+    if json_output:
+        typer.echo(json.dumps(summary))
+    else:
+        render(summary)
+
+
 @app.command("reset", help="Clear the current review run.")
 def reset(json_output: JsonOutput = False) -> None:
     config = configuration(json_output)
@@ -258,10 +328,7 @@ def show_diff(
 
 
 for name, description in {
-    "check": "Check whether the review passes.",
-    "report": "Summarize the review.",
     "trust": "Trust repository-local context commands.",
-    "waive": "Document a violation that may ship.",
 }.items():
     app.command(name, help=f"{description} Unavailable: not implemented.")(
         unimplemented
