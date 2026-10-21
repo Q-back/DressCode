@@ -5,6 +5,8 @@ description: Understand and use DressCode, run diff-bound reviews before hand-ov
 
 # DressCode
 
+## What is DressCode
+
 DressCode turns recurring agent mistakes into yes/no review questions. Expected
 answers and explanations stay sealed until a verdict is recorded. The CLI tracks
 answers against the current diff; it neither launches reviewers nor proves their
@@ -18,6 +20,8 @@ required). Run subsequent commands in the target Git repository. No questions ar
 seeded; add rules as below. Use `dresscode <command> --help` for flags.
 
 ## Review
+
+Follow this typical flow before handing over a coding task.
 
 1. Run tests and inspect `dresscode diff --json` for the review base and scope.
    This reports paths and counts, not a code patch. Review the full cumulative
@@ -46,10 +50,11 @@ Untrusted, failed or timed-out context blocks the gate even if listing succeeds.
 
 ## Rules
 
-Capture an observed, recurring mistake, not every imaginable best practice. Keep
-the set small. Ask one concrete yes/no question with a clear applicability
-boundary; choose `--expects true` for a wanted yes or `false` for a wanted no.
-Use `--reveal` to explain the correction, not to hide essential review criteria.
+Ask one concrete yes/no question with a clear applicability boundary. Make it
+answerable from the diff and available evidence, without reading the sealed
+expectation or explanation. Choose `--expects true` for a wanted yes or `false`
+for a wanted no. Use `--reveal` to explain the correction, not to hide essential
+review criteria.
 
 ```sh
 dresscode add shared-builder \
