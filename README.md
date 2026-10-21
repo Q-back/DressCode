@@ -23,6 +23,19 @@ Without a tool installation, run from the checkout:
 uv run dresscode --help
 ```
 
+## Agent skill
+
+`dresscode --skill` prints a short, standalone `SKILL.md` to stdout and exits
+successfully, even outside a Git repository. It covers setup, the review workflow,
+and authoring useful rules. It reads no project configuration and changes nothing.
+
+Give the output to an agent directly, or save it as `SKILL.md` in a skill directory
+supported by your agent harness. Installation and activation are up to you:
+
+```sh
+dresscode --skill > SKILL.md
+```
+
 ## Usage
 
 Run the installed `dresscode` command from the target Git repository. Configure
@@ -37,7 +50,7 @@ Every command supports `--help` (exit `0`) and `--json`. JSON output is a single
 
 ## Repository identity
 
-Run commands inside a Git work tree. Outside one, commands exit `2` with a clear error (or a JSON error with `--json`); help remains available anywhere.
+Run commands inside a Git work tree. Outside one, commands exit `2` with a clear error (or a JSON error with `--json`); help and `dresscode --skill` remain available anywhere.
 
 Repositories are identified by their `origin` URL from the shared clone configuration (worktree-specific overrides do not change identity), after removing the scheme, credentials, trailing slash and `.git` suffix. For example, `git@example.com:team/repo.git` and `https://example.com/team/repo` both identify `example.com/team/repo`. With no origin, the identity is the real path of the main worktree. Linked worktrees share that identity, even without a remote. Discovering identity does not write configuration or state.
 

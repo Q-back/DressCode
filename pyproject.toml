@@ -22,6 +22,9 @@ build-backend = "setuptools.build_meta"
 where = ["."]
 include = ["dresscode*"]
 
+[tool.setuptools.package-data]
+dresscode = ["SKILL.md"]
+
 [tool.pytest.ini_options]
 testpaths = ["dresscode"]
 

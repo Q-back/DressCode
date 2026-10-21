@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import asdict
+from importlib.resources import files
 from typing import Annotated, NoReturn
 
 import typer
@@ -27,6 +28,23 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
+
+
+@app.callback(invoke_without_command=True)
+def options(
+    skill: Annotated[
+        bool,
+        typer.Option(
+            "--skill", help="Print the agent skill as Markdown and exit.", is_eager=True
+        ),
+    ] = False,
+) -> None:
+    if skill:
+        typer.echo(
+            files("dresscode").joinpath("SKILL.md").read_text(encoding="utf-8"),
+            nl=False,
+        )
+        raise typer.Exit()
 
 
 def fail(message: str, json_output: bool) -> NoReturn:
