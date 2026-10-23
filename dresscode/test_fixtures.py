@@ -45,3 +45,38 @@ def test_git_repo_has_base_and_feature_branches(git_repo: Path) -> None:
     assert head.stdout.strip() == "feature/test"
     assert status.stdout == ""
     assert base.stdout == "Test repository.\n"
+
+
+def test_git_repo_mutations_do_not_change_template(
+    git_repo: Path, git_repo_template: Path
+) -> None:
+    baseline = {
+        path.relative_to(git_repo_template): path.read_bytes()
+        for path in git_repo_template.rglob("*")
+        if path.is_file()
+    }
+    for relative in baseline:
+        assert (git_repo / relative).stat().st_ino != (
+            git_repo_template / relative
+        ).stat().st_ino
+
+    (git_repo / "README.md").write_text("Changed in one test.\n")
+    for arguments in (
+        ("config", "user.name", "Changed author"),
+        ("switch", "--create", "isolated"),
+        ("add", "README.md"),
+        ("commit", "--message", "Isolated change"),
+    ):
+        subprocess.run(
+            ["git", *arguments],
+            cwd=git_repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    assert {
+        path.relative_to(git_repo_template): path.read_bytes()
+        for path in git_repo_template.rglob("*")
+        if path.is_file()
+    } == baseline

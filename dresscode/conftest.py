@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -16,13 +17,15 @@ def xdg_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-@pytest.fixture
-def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    repository = tmp_path / "repo"
-    repository.mkdir()
+@pytest.fixture(scope="session")
+def git_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build once; tests receive independent copies, including Git metadata."""
+    repository = tmp_path_factory.mktemp("git-repo-template")
     (repository / "README.md").write_text("Test repository.\n")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    environment = os.environ | {
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
 
     for arguments in (
         ("init", "--initial-branch=main"),
@@ -37,8 +40,18 @@ def git_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         subprocess.run(
             ["git", *arguments],
             cwd=repository,
+            env=environment,
             check=True,
             capture_output=True,
             text=True,
         )
     return repository
+
+
+@pytest.fixture
+def git_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, git_repo_template: Path
+) -> Path:
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    return shutil.copytree(git_repo_template, tmp_path / "repo", symlinks=True)
