@@ -73,14 +73,18 @@ The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--num
 
 ### Requirement: Explicit revision validation
 
-Explicit refs SHALL resolve to one commit. Invalid, empty, ambiguous, non-commit or range values SHALL exit `2` without fallback or successful output. Revision text SHALL NOT be interpreted as Git options.
+Explicit refs SHALL resolve to one commit using Git refname precedence. Invalid/empty refs, ambiguous abbreviated object IDs, non-commit objects and ranges SHALL exit `2` without fallback or successful output. Revision text SHALL NOT be interpreted as Git options.
 
 #### Scenario: Supported single-commit revisions
 - **WHEN** a valid branch, remote-tracking ref, lightweight/annotated tag, full/unambiguous abbreviated commit ID or `HEAD~2` is supplied
 - **THEN** its resolved commit is the baseline
 
+#### Scenario: Refname collisions
+- **WHEN** a branch and tag share a name
+- **THEN** Git refname precedence applies; fully qualified refs select the intended branch or tag
+
 #### Scenario: Invalid revision
-- **WHEN** an invalid value is supplied, including a blob/tree ID, range or option-like value after `--`
+- **WHEN** an invalid value is supplied, including an ambiguous abbreviated object ID, blob/tree ID, range or option-like value after `--`
 - **THEN** the command exits `2` with a revision error, without executing Git options
 - **AND** `--json` emits one error document on stdout with empty stderr
 

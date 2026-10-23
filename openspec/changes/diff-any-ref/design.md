@@ -11,7 +11,7 @@ One resolved baseline per invocation, shared across all review consumers. No act
 ## Decisions
 
 - Add subcommand-local `--base REF` to `diff/list/answer/waive/check/report/reset`; `diff REF` is shorthand, not a second selector. Reject both together, including empty arguments rather than treating them as omission.
-- A pure resolver selects explicit ref, inherited `DRESSCODE_BASE_COMMIT`, or the default merge base, in that order. Resolve refs safely with `rev-parse --verify --quiet --end-of-options REF^{commit}`; require one baseline. Use only its full SHA afterward, including counts, raw metadata and Gitlink patches. Unrelated explicit histories need no merge base.
+- A pure resolver selects explicit ref, inherited `DRESSCODE_BASE_COMMIT`, or the default merge base, in that order. Resolve refs safely with `rev-parse --verify --quiet --end-of-options REF^{commit}`; require one baseline. Follow Git refname precedence; fully qualified refs disambiguate names, while ambiguous abbreviated object IDs fail. Use only its full SHA afterward, including counts, raw metadata and Gitlink patches. Unrelated explicit histories need no merge base.
 - Normalize legacy `base_ref` to `merge_base_with` per config document before merging. Reject both in one document; retain normal layer precedence and configuration errors. Do not resolve unused default targets or rewrite config.
 - Pass one scope value (repository, branch, baseline SHA) through collection, stores, gate and reports. Canonically encode that tuple in a versioned run key; retain detached-HEAD naming. Ref aliases share state; a changed baseline selects another run. Content edits within a run make answers stale through the existing fingerprint.
 - Export the pinned SHA only into context subprocesses. Nested unqualified DressCode commands consume it before defaults; explicit child refs remain auxiliary evidence. Context caches live inside the selected run, so equal fingerprints cannot transfer evidence between baselines.
@@ -24,6 +24,6 @@ Moving refs select new runs rather than staling old runs; use the displayed SHA 
 
 ## Migration Plan
 
-Keep legacy run files untouched and use a new key namespace; their baseline cannot safely be inferred, so require fresh answers. Preserve counters, retirement and trust stores. Document the config alias and additive JSON metadata. Rollback can still read untouched old files but must require a fresh review; never treat old approvals as covering intervening edits.
+Keep legacy run files untouched and use a new key namespace; their baseline cannot safely be inferred, so require fresh answers. Preserve counters, retirement and trust stores. Document the config alias and additive JSON metadata. After downgrade, operators must run the legacy `dresscode reset` in each repository/branch before relying on its gate, then review again. Older binaries do not invalidate retained approvals automatically.
 
 Land default baseline-keyed reviews with tests/docs first, then exact-ref CLI workflows with their tests/docs. Each group leaves default review working; only the second exposes arbitrary-ref selection.

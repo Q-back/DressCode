@@ -60,7 +60,7 @@ Successful review commands SHALL identify the baseline in text and include top-l
 
 ### Requirement: Legacy run safety
 
-Legacy repo-and-branch runs without baseline identity SHALL NOT provide approvals or evidence to baseline-keyed runs. Their files SHALL remain untouched; new runs SHALL start unanswered unless baseline-keyed state already exists. Shared counters, retirement and trust records SHALL be retained.
+Legacy repo-and-branch runs without baseline identity SHALL NOT provide approvals or evidence to baseline-keyed runs. Their files SHALL remain untouched; new runs SHALL start unanswered unless baseline-keyed state already exists. Shared counters, retirement and trust records SHALL be retained. Rollback documentation SHALL require a legacy `dresscode reset` per repository/branch after downgrade, before relying on the old gate.
 
 #### Scenario: Existing installation upgrades
 - **WHEN** legacy verdicts or waivers exist at upgrade

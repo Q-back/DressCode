@@ -8,12 +8,12 @@ Only default selection is public in this group; arbitrary-ref CLI overrides arri
 
 - [ ] 1.1 Add failing real-Git tests for default resolution, config alias/layer precedence, baseline-keyed identity, equivalent baselines, moving baselines and untouched legacy runs. Verify failure before implementation.
 - [ ] 1.2 Introduce shared resolved scope throughout default review consumers, versioned run keys and additive output metadata. Pin context subprocesses via `DRESSCODE_BASE_COMMIT`. Verify existing workflows, detached HEAD, fingerprints, evidence/waiver/reset isolation, sealed questions and legacy-state safety.
-- [ ] 1.3 Document `merge_base_with`, the deprecated alias, scope metadata and required fresh reviews in README and packaged skill. Verify examples and default CLI help against tests; do not advertise unimplemented overrides.
+- [ ] 1.3 Document `merge_base_with`, the deprecated alias, scope metadata, fresh reviews and mandatory legacy reset after downgrade in README and packaged skill. Verify examples and default CLI help against tests; do not advertise unimplemented overrides.
 - [ ] 1.4 Run the checks below and complete this group's commit/review boundary; verify all existing default consumers remain working before group 2.
 
 ## 2. Commit: Review exact refs across the full CLI workflow
 
-- [ ] 2.1 Add failing tests for shared `--base REF`, positional `diff REF`, conflicts, supported/invalid revisions, diverged/unrelated histories and overridden defaults. Verify text/JSON errors and option-like input after `--`.
+- [ ] 2.1 Add failing tests for shared `--base REF`, positional `diff REF`, conflicts, supported/invalid revisions, diverged/unrelated histories and overridden defaults. Verify text/JSON errors, Git refname precedence, fully qualified refs, ambiguous abbreviated IDs and option-like input after `--`.
 - [ ] 2.2 Expose exact-ref selection on all seven review commands and pin gate remedies to the resolved SHA. Verify aliases/default selection share runs only for equal baselines, and inspection does not change later defaults.
 - [ ] 2.3 Add broad subprocess workflows reviewing two baselines, including equal fingerprints, local/untracked/excluded content, nested context inheritance, ref movement, waivers/strict gates, reports and reset isolation. Verify fixed-SHA fingerprint stability and clean/dirty submodule behavior without mocking Git.
 - [ ] 2.4 Update help, README and packaged skill with complete scoped-review examples. Verify documented commands and additive output metadata against CLI tests.
