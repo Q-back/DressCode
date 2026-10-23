@@ -1,12 +1,22 @@
 # Tasks
 
-## 1. Commit: Add exact-ref diff inspection
+Each ordered group ships working implementation, tests, compatibility and docs together. Write tests first. At each green boundary, inspect the diff and actual added-line count, commit, then obtain fresh independent review per repository instructions; keep review-fix rounds in separate commits and re-review.
 
-Ship implementation, tests, compatibility and docs together; checkboxes are not separate commits.
+## 1. Commit: Key default reviews by their resolved baseline
 
-- [ ] 1.1 Write failing real-Git CLI tests for the spec scenarios: revision types/errors, diverged/unrelated histories, configuration precedence and output modes. Confirm failures before implementation.
-- [ ] 1.2 Add the optional argument and shared collector baseline selection. Verify those tests pass, including consistent submodule patch/count baselines and unchanged default callers.
-- [ ] 1.3 Add exact-mode rendering and metadata; verify text/numstat streams, JSON precedence and byte-for-byte default output compatibility.
-- [ ] 1.4 Add broad integration coverage for local/untracked/ignored/excluded content, Gitlink updates, dirty rejection, fixed-baseline fingerprints and read-only inspection. Verify subsequent default `diff`, `check` and `report` preserve scope and verdicts.
-- [ ] 1.5 Update CLI help, README and packaged skill; verify examples against tests, including the distinction between explicit-ref context evidence and gate scope.
-- [ ] 1.6 Run `pytest`, `ruff format --check .`, `ruff check .` and `ty check` via `uv run --no-sync`, plus `openspec validate diff-any-ref --strict`. Inspect the diff and actual added-line count, commit, then complete fresh independent review and separate review-fix commits per repository instructions. Require passing checks and final `dresscode check` before hand-over.
+Only default selection is public in this group; arbitrary-ref CLI overrides arrive in group 2.
+
+- [ ] 1.1 Add failing real-Git tests for default resolution, config alias/layer precedence, baseline-keyed identity, equivalent baselines, moving baselines and untouched legacy runs. Verify failure before implementation.
+- [ ] 1.2 Introduce shared resolved scope throughout default review consumers, versioned run keys and additive output metadata. Pin context subprocesses via `DRESSCODE_BASE_COMMIT`. Verify existing workflows, detached HEAD, fingerprints, evidence/waiver/reset isolation, sealed questions and legacy-state safety.
+- [ ] 1.3 Document `merge_base_with`, the deprecated alias, scope metadata and required fresh reviews in README and packaged skill. Verify examples and default CLI help against tests; do not advertise unimplemented overrides.
+- [ ] 1.4 Run the checks below and complete this group's commit/review boundary; verify all existing default consumers remain working before group 2.
+
+## 2. Commit: Review exact refs across the full CLI workflow
+
+- [ ] 2.1 Add failing tests for shared `--base REF`, positional `diff REF`, conflicts, supported/invalid revisions, diverged/unrelated histories and overridden defaults. Verify text/JSON errors and option-like input after `--`.
+- [ ] 2.2 Expose exact-ref selection on all seven review commands and pin gate remedies to the resolved SHA. Verify aliases/default selection share runs only for equal baselines, and inspection does not change later defaults.
+- [ ] 2.3 Add broad subprocess workflows reviewing two baselines, including equal fingerprints, local/untracked/excluded content, nested context inheritance, ref movement, waivers/strict gates, reports and reset isolation. Verify fixed-SHA fingerprint stability and clean/dirty submodule behavior without mocking Git.
+- [ ] 2.4 Update help, README and packaged skill with complete scoped-review examples. Verify documented commands and additive output metadata against CLI tests.
+- [ ] 2.5 Run the checks below, inspect the final cumulative changes and complete commit/review. Require final `dresscode check` success before hand-over; report blockers instead of declaring completion.
+
+Checks for each group: `uv run --no-sync` with `pytest`, `ruff format --check .`, `ruff check .` and `ty check`; also `openspec validate diff-any-ref --strict`.
