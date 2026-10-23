@@ -25,6 +25,7 @@ def git_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
     environment = os.environ | {
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_CONFIG_NOSYSTEM": "1",
+        "XDG_CONFIG_HOME": str(tmp_path_factory.mktemp("git-template-config")),
     }
 
     for arguments in (

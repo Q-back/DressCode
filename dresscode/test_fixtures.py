@@ -1,6 +1,10 @@
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 def test_xdg_home_is_isolated(xdg_home: Path, tmp_path: Path) -> None:
@@ -80,3 +84,48 @@ def test_git_repo_mutations_do_not_change_template(
         for path in git_repo_template.rglob("*")
         if path.is_file()
     } == baseline
+
+
+@pytest.mark.parametrize(
+    ("filename", "content"),
+    [
+        ("ignore", "README.md\n"),
+        ("attributes", "README.md working-tree-encoding=UTF-16\n"),
+    ],
+)
+def test_git_repo_template_ignores_host_xdg_config(
+    tmp_path: Path, filename: str, content: str
+) -> None:
+    host_config = tmp_path / "host-config"
+    (host_config / "git").mkdir(parents=True)
+    (host_config / "git" / filename).write_text(content)
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    shutil.copyfile(Path(__file__).with_name("conftest.py"), suite / "conftest.py")
+    (suite / "test_template.py").write_text(
+        "def test_repository(git_repo):\n"
+        "    assert (git_repo / 'README.md').read_text() == 'Test repository.\\n'\n"
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "--tb=short",
+            "--basetemp",
+            str(tmp_path / "pytest"),
+            "--confcutdir",
+            str(suite),
+            str(suite),
+        ],
+        cwd=suite,
+        check=False,
+        env=os.environ | {"XDG_CONFIG_HOME": str(host_config)},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
