@@ -301,7 +301,7 @@ dresscode diff --numstat
 dresscode diff --json
 ```
 
-The scope is the merge base of `HEAD` and the resolved base compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
+By default, the scope is the merge base of `HEAD` and the resolved target compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
 
 Base resolution uses the first available candidate:
 
@@ -309,7 +309,45 @@ Base resolution uses the first available candidate:
 configured merge_base_with → origin/HEAD → local main → local master → root commit
 ```
 
-An explicit `merge_base_with` must resolve to a commit; an invalid value exits `2` rather than silently choosing another base. A repository with no commits also exits `2`. The output identifies the resolved merge-base commit as `base_commit`.
+A configured `merge_base_with` must resolve to a commit; an invalid value exits `2` rather than silently choosing another base. A repository with no commits also exits `2`. The output identifies the resolved merge-base commit as `base_commit`.
+
+### Review an exact commit
+
+`diff REF` is shorthand for `diff --base REF`. All seven review commands accept
+`--base REF`: `diff`, `list`, `answer`, `waive`, `check`, `report` and `reset`.
+An explicit ref selects its exact commit, including diverged or unrelated
+history; it does not calculate a merge base or resolve the unused default target.
+Branches, remote-tracking refs, lightweight/annotated tags, commit IDs and
+single-commit expressions such as `HEAD~2` work. Git refname precedence applies;
+use `refs/heads/name` or `refs/tags/name` to disambiguate collisions. Empty or
+invalid refs, ambiguous abbreviated IDs, ranges and blob/tree IDs exit `2`.
+Supplying both positional REF and `--base` also exits `2`. Revision errors under
+`--json` emit one error document on stdout and leave stderr empty.
+
+Pin a SHA across commands so a moving branch or tag cannot change the review:
+
+```sh
+dresscode diff HEAD~2 --numstat
+BASE=$(git rev-parse HEAD~2)
+dresscode list --base "$BASE" --json
+dresscode answer test-factory --base "$BASE" --yes --evidence "Reused the shared fixture."
+dresscode check --base "$BASE" --strict
+dresscode report --base "$BASE"
+dresscode reset --base "$BASE"
+```
+
+To accept a current violation, record the reviewer's violating verdict first,
+then use `dresscode waive test-factory --base "$BASE" --reason "<reason>"`.
+The ordinary gate accepts that waiver; `check --strict --base "$BASE"` rejects it.
+Gate repair commands pin the resolved SHA too.
+
+Selection priority is explicit REF, inherited `DRESSCODE_BASE_COMMIT`, then the
+default merge base. Context subprocesses inherit the parent's already resolved
+SHA; an explicit child ref can supply auxiliary evidence without changing the
+parent scope. Inspection never changes the selector for later invocations.
+Equivalent selectors share a run only when their baseline SHAs match. Different
+baselines keep separate answers, history, context and waivers even if content
+fingerprints match. Reset clears only the selected run; counters remain shared.
 
 ### Exclusions
 

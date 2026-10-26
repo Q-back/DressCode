@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +112,7 @@ def test_equivalent_default_targets_share_state_and_context_is_pinned(
     rules.write_text(rules.read_text() + 'context = "printenv DRESSCODE_BASE_COMMIT"\n')
     invoke("trust")
     first = invoke("list")
+    assert "DRESSCODE_BASE_COMMIT" not in os.environ
     assert first["entries"][0]["context_output"] == git(
         review_repo, "rev-parse", "main"
     )

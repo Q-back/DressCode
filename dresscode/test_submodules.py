@@ -9,41 +9,6 @@ from dresscode.diff import DiffError
 from dresscode.test_diff import git, scope
 
 
-@pytest.fixture
-def submodule_repo(git_repo: Path, tmp_path: Path) -> tuple[Path, Path]:
-    source = tmp_path / "submodule-source"
-    source.mkdir()
-    git(source, "init", "--initial-branch=main")
-    (source / "file.txt").write_text("old\n")
-    (source / ".gitignore").write_text("*.cache\n")
-    git(source, "add", ".")
-    git(
-        source,
-        "-c",
-        "user.name=Tests",
-        "-c",
-        "user.email=tests@dresscode.invalid",
-        "commit",
-        "-m",
-        "Source baseline",
-    )
-    git(
-        git_repo,
-        "-c",
-        "protocol.file.allow=always",
-        "submodule",
-        "add",
-        str(source),
-        "lib",
-    )
-    submodule = git_repo / "lib"
-    git(submodule, "config", "user.name", "DressCode tests")
-    git(submodule, "config", "user.email", "tests@dresscode.invalid")
-    git(git_repo, "commit", "--all", "--message", "Submodule baseline")
-    git(git_repo, "branch", "--force", "main", "HEAD")
-    return git_repo, submodule
-
-
 @pytest.mark.parametrize("change", ["unstaged", "staged", "untracked"])
 def test_dirty_submodule_is_rejected_even_when_git_config_hides_it(
     submodule_repo: tuple[Path, Path], change: str

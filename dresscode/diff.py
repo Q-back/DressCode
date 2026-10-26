@@ -98,11 +98,13 @@ def collect(config: Configuration, scope: ResolvedScope | None = None) -> Scoped
     )
 
 
-def resolve_scope(config: Configuration) -> ResolvedScope:
+def resolve_scope(config: Configuration, reference: str | None = None) -> ResolvedScope:
     root = config.repository.root
-    inherited = os.environ.get("DRESSCODE_BASE_COMMIT")
-    if inherited is not None:
-        baseline = _resolve_commit(root, inherited)
+    selected = (
+        reference if reference is not None else os.environ.get("DRESSCODE_BASE_COMMIT")
+    )
+    if selected is not None:
+        baseline = _resolve_commit(root, selected)
     else:
         _, target = resolve_base(root, config.settings.get("merge_base_with"))
         baseline = _git(root, "merge-base", "HEAD", target).decode().strip()

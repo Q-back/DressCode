@@ -45,10 +45,17 @@ def _trust_path(config: Configuration) -> Path:
 
 
 def required_context(
-    config: Configuration, entry: Entry, state: RunState, fingerprint: str
+    config: Configuration,
+    entry: Entry,
+    state: RunState,
+    fingerprint: str,
+    scope: ResolvedScope,
 ) -> ContextRecord:
     if not trusted(config, entry):
-        status, error = "context_untrusted", "Run dresscode trust, then dresscode list."
+        status, error = (
+            "context_untrusted",
+            f"Run dresscode trust, then dresscode list --base {scope.base_commit}.",
+        )
     else:
         previous = state["contexts"].get(entry.id)
         if (
@@ -57,7 +64,10 @@ def required_context(
             and previous["command"] == entry.context
         ):
             return previous
-        status, error = "unanswered", "Run dresscode list for current context evidence."
+        status, error = (
+            "unanswered",
+            f"Run dresscode list --base {scope.base_commit} for current context evidence.",
+        )
     return ContextRecord(
         state=status,
         error=error,
@@ -72,7 +82,7 @@ def execute(
 ) -> ContextRecord:
     record = ContextRecord(
         state="context_untrusted",
-        error="Run dresscode trust, then dresscode list.",
+        error=f"Run dresscode trust, then dresscode list --base {scope.base_commit}.",
         context_output="",
         command=entry.context or "",
         fingerprint=fingerprint,

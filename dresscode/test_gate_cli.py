@@ -136,7 +136,8 @@ def test_blockers_name_question_state_and_fix(git_repo: Path, state: str) -> Non
     )
     if state == "violated":
         assert any(
-            command == "dresscode waive --reason <text> -- factory"
+            command
+            == f"dresscode waive --base {summary['base_commit']} --reason <text> -- factory"
             for command in entry["commands"]
         )
     plain = invoke("check")
