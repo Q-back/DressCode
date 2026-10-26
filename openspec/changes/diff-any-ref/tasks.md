@@ -17,6 +17,6 @@ Only default selection is public in this group; arbitrary-ref CLI overrides arri
 - [x] 2.2 Expose exact-ref selection on all seven review commands and pin gate remedies to the resolved SHA. Verify aliases/default selection share runs only for equal baselines, and inspection does not change later defaults.
 - [x] 2.3 Add broad subprocess workflows reviewing two baselines, including equal fingerprints, local/untracked/excluded content, nested context inheritance, ref movement, waivers/strict gates, reports and reset isolation. Verify fixed-SHA fingerprint stability and clean/dirty submodule behavior without mocking Git.
 - [x] 2.4 Update help, README and packaged skill with complete scoped-review examples. Verify documented commands and output metadata against CLI tests.
-- [ ] 2.5 Run the checks below, inspect the final cumulative changes and complete commit/review. Require final `dresscode check` success before hand-over; report blockers instead of declaring completion.
+- [x] 2.5 Run the checks below, inspect the final cumulative changes and complete commit/review. Require final `dresscode check` success before hand-over; report blockers instead of declaring completion.
 
 Checks for each group: `uv run --no-sync` with `pytest`, `ruff format --check .`, `ruff check .` and `ty check`; also `openspec validate diff-any-ref --strict`.
