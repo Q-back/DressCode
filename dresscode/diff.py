@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from dresscode.config import Configuration
+from dresscode.repo import Repository
 
 DEFAULT_EXCLUDES = (
     ":(glob)**/*.lock",
@@ -39,11 +40,24 @@ class FileChange:
 
 
 @dataclass(frozen=True)
+class ResolvedScope:
+    repository: Repository
+    base_commit: str
+    run_key: str
+
+    def metadata(self) -> dict[str, str]:
+        return {"base_commit": self.base_commit, "run_key": self.run_key}
+
+
+@dataclass(frozen=True)
 class ScopedDiff:
-    base_ref: str
-    merge_base: str
+    scope: ResolvedScope
     files: tuple[FileChange, ...]
     fingerprint: str
+
+    @property
+    def base_commit(self) -> str:
+        return self.scope.base_commit
 
     @property
     def added(self) -> int:
@@ -58,13 +72,12 @@ class DiffError(ValueError):
     """The review scope cannot be resolved or read."""
 
 
-def collect(config: Configuration) -> ScopedDiff:
+def collect(config: Configuration, scope: ResolvedScope | None = None) -> ScopedDiff:
     root = config.repository.root
     pathspecs = _pathspecs(config)
-    base_ref, base_commit = resolve_base(root, config.settings.get("base_ref"))
-    merge_base = _git(root, "merge-base", "HEAD", base_commit).decode().strip()
+    scope = scope if scope is not None else resolve_scope(config)
     _reject_dirty_submodules(root, pathspecs)
-    arguments = ("diff", "--merge-base", base_commit, *DIFF_OPTIONS)
+    arguments = ("diff", scope.base_commit, *DIFF_OPTIONS)
     counts = _git(root, *arguments, "--numstat", "-z", "--", *pathspecs)
     files = [_parse_numstat(record) for record in counts.split(b"\0") if record]
     raw = _git(root, *arguments, "--raw", "--no-abbrev", "-z", "--", *pathspecs)
@@ -79,16 +92,61 @@ def collect(config: Configuration) -> ScopedDiff:
     except OSError as error:
         raise DiffError(f"Cannot read scoped content at {root}: {error}") from error
     return ScopedDiff(
-        base_ref,
-        merge_base,
+        scope,
         tuple(sorted(files, key=lambda file: file.path)),
         fingerprint,
     )
 
 
+def resolve_scope(config: Configuration) -> ResolvedScope:
+    root = config.repository.root
+    inherited = os.environ.get("DRESSCODE_BASE_COMMIT")
+    if inherited is not None:
+        baseline = _resolve_commit(root, inherited)
+    else:
+        _, target = resolve_base(root, config.settings.get("merge_base_with"))
+        baseline = _git(root, "merge-base", "HEAD", target).decode().strip()
+    branch = (
+        _git(root, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1))
+        .decode()
+        .strip()
+    )
+    if not branch:
+        branch = (
+            "detached-" + _git(root, "rev-parse", "--short", "HEAD").decode().strip()
+        )
+    key = json.dumps(
+        ["v2", config.repository.identity, branch, baseline],
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    return ResolvedScope(config.repository, baseline, key)
+
+
+def _resolve_commit(root: Path, reference: str) -> str:
+    if not reference:
+        raise DiffError("Revision must not be empty")
+    commit = (
+        _git(
+            root,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            f"{reference}^{{commit}}",
+            allowed_codes=(0, 1),
+        )
+        .decode()
+        .strip()
+    )
+    if not commit:
+        raise DiffError(f"Revision does not resolve to one commit: {reference}")
+    return commit
+
+
 def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
     if configured is not None and (not isinstance(configured, str) or not configured):
-        raise DiffError("base_ref must be a non-empty string")
+        raise DiffError("merge_base_with must be a non-empty string")
     candidates = (
         [(configured, configured)]
         if configured is not None
@@ -115,7 +173,7 @@ def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
         if commit:
             return name, commit
     if configured is not None:
-        raise DiffError(f"base_ref does not resolve to a commit: {configured}")
+        raise DiffError(f"merge_base_with does not resolve to a commit: {configured}")
     root_commit = (
         _git(root, "rev-list", "--max-parents=0", "HEAD").decode().splitlines()[0]
     )

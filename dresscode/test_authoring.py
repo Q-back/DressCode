@@ -9,6 +9,7 @@ from typer.testing import CliRunner, Result
 
 from dresscode.cli import app
 from dresscode.config import layer_paths, load
+from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.store import EntryStore
 
@@ -51,7 +52,8 @@ def test_add_round_trips_to_sealed_listing(git_repo: Path, layer: str | None) ->
     }
     assert load(repository).entries[0].reveal == "SECRET"
     assert json.loads(run("list", "--json").stdout) == {
-        "entries": [{"id": "factory", "question": QUESTION}]
+        **resolve_scope(load(repository)).metadata(),
+        "entries": [{"id": "factory", "question": QUESTION}],
     }
     text = run("list").stdout
     assert QUESTION in text and "SECRET" not in text and "expects" not in text
@@ -61,7 +63,7 @@ def test_add_round_trips_to_sealed_listing(git_repo: Path, layer: str | None) ->
 @pytest.mark.parametrize(
     "original",
     [
-        '# Keep this comment\nbase_ref = "main"\n',
+        '# Keep this comment\nmerge_base_with = "main"\n',
         "# Keep this comment\nentries = []\n",
         '# Keep this comment\nentries = [{id="other",question="Other?",expects=true}]\n',
         '# Keep this comment\n[[entries]]\nid="other"\nquestion="Other?"\nexpects=true\n[context]\ntimeout_seconds=3\n',
@@ -86,7 +88,7 @@ def test_add_uses_existing_directory_without_creating_fallback(
     directory = git_repo / ".dresscode"
     directory.mkdir()
     if existing_file:
-        (directory / "z.toml").write_text('base_ref = "main"\n')
+        (directory / "z.toml").write_text('merge_base_with = "main"\n')
     run(*ADD)
     destination = directory / ("z.toml" if existing_file else "rules.toml")
     assert "factory" in destination.read_text()
@@ -116,7 +118,10 @@ def test_retire_keeps_history_and_counters_without_config_writes(
             ).stdout
         )
         assert response["status"] == "retired"
-        assert json.loads(run("list", "--json").stdout) == {"entries": []}
+        assert json.loads(run("list", "--json").stdout) == {
+            **resolve_scope(load(discover(git_repo))).metadata(),
+            "entries": [],
+        }
         history = EntryStore(repository).retirements()["factory"]
         assert history["reason"] == (reason or "")
         assert history["timestamp"]
@@ -133,7 +138,10 @@ def test_disabled_entries_are_not_listed(git_repo: Path) -> None:
     path = layer_paths(discover(git_repo))["private"][0]
     path.parent.mkdir(parents=True)
     path.write_text('[[entries]]\nid="factory"\nenabled=false\n')
-    assert json.loads(run("list", "--json").stdout) == {"entries": []}
+    assert json.loads(run("list", "--json").stdout) == {
+        **resolve_scope(load(discover(git_repo))).metadata(),
+        "entries": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -152,7 +160,10 @@ def test_authoring_errors_are_single_json_documents(arguments: list[str]) -> Non
 
 
 def test_empty_listing_does_not_create_state(git_repo: Path) -> None:
-    assert json.loads(run("list", "--json").stdout) == {"entries": []}
+    assert json.loads(run("list", "--json").stdout) == {
+        **resolve_scope(load(discover(git_repo))).metadata(),
+        "entries": [],
+    }
     assert not EntryStore(discover(git_repo)).path.exists()
 
 

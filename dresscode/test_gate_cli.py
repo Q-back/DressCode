@@ -6,6 +6,8 @@ import pytest
 from typer.testing import CliRunner
 
 from dresscode.cli import app
+from dresscode.config import load
+from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.report import render
 from dresscode.run import RunStore
@@ -100,7 +102,11 @@ def test_empty_entry_list_passes(git_repo: Path) -> None:
     result = invoke("check", "--json")
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == {"status": "passed", "entries": []}
+    assert json.loads(result.stdout) == {
+        **resolve_scope(load(discover(git_repo))).metadata(),
+        "status": "passed",
+        "entries": [],
+    }
 
 
 @pytest.mark.parametrize("state", ["unanswered", "violated", "stale", "context_failed"])
@@ -110,7 +116,7 @@ def test_blockers_name_question_state_and_fix(git_repo: Path, state: str) -> Non
     if state == "stale":
         (git_repo / "new.py").write_text("changed\n")
     if state == "context_failed":
-        run = RunStore(discover(git_repo))
+        run = RunStore(resolve_scope(load(discover(git_repo))))
         document = json.loads(run.path.read_text())
         document["verdicts"]["factory"]["verdict"] = "context_failed"
         run.path.write_text(json.dumps(document))
@@ -144,7 +150,9 @@ def test_waiver_passes_normal_gate_but_not_strict(git_repo: Path) -> None:
     result = invoke("waive", "factory", "--reason", "  Accepted tradeoff  ", "--json")
     assert result.exit_code == 0, result.output
     response = json.loads(result.stdout)
-    waiver = RunStore(discover(git_repo)).read()["waivers"]["factory"]
+    waiver = RunStore(resolve_scope(load(discover(git_repo)))).read()["waivers"][
+        "factory"
+    ]
     assert waiver == {
         "reason": "Accepted tradeoff",
         "fingerprint": response["fingerprint"],
@@ -170,7 +178,7 @@ def test_invalid_waivers_exit_two(git_repo: Path, verdict: str | None) -> None:
     assert result.exit_code == 2, result.output
     assert result.stderr == ""
     assert json.loads(result.stdout)["status"] == "error"
-    assert RunStore(discover(git_repo)).read()["waivers"] == {}
+    assert RunStore(resolve_scope(load(discover(git_repo)))).read()["waivers"] == {}
 
 
 def test_unknown_id_and_missing_reason_are_usage_errors() -> None:
@@ -188,7 +196,7 @@ def test_waivers_expire_and_reset_with_verdicts(git_repo: Path) -> None:
     assert result.exit_code == 1
     assert json.loads(result.stdout)["entries"][0]["state"] == "stale"
     assert invoke("reset").exit_code == 0
-    assert RunStore(discover(git_repo)).read()["waivers"] == {}
+    assert RunStore(resolve_scope(load(discover(git_repo)))).read()["waivers"] == {}
     assert (
         json.loads(invoke("check", "--json").stdout)["entries"][0]["state"]
         == "unanswered"
@@ -214,7 +222,7 @@ def test_report_shows_verdict_evidence_reveal_size_and_waivers(waived: bool) -> 
     assert result.stderr == ""
     summary = json.loads(result.stdout)
     assert summary["status"] == ("passed-with-waivers" if waived else "passed")
-    assert summary["run_key"].endswith(":feature/test")
+    assert json.loads(summary["run_key"])[2] == "feature/test"
     assert summary["diff"]["added"] > 0
     assert summary["diff"]["removed"] == 0
     entry = summary["entries"][0]
@@ -276,7 +284,7 @@ def test_retired_and_disabled_entries_are_absent(git_repo: Path) -> None:
 @pytest.mark.parametrize("command", ["check", "report"])
 def test_malformed_waiver_is_a_state_error(git_repo: Path, command: str) -> None:
     record()
-    run = RunStore(discover(git_repo))
+    run = RunStore(resolve_scope(load(discover(git_repo))))
     state = json.loads(run.path.read_text())
     state["waivers"]["factory"] = {"reason": "Missing fingerprint"}
     run.path.write_text(json.dumps(state))

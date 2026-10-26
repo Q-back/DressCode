@@ -51,6 +51,19 @@ or add waivers. The calling workflow handles fixes and accepted exceptions.
 Answers and waivers become stale when the reviewed diff changes. An empty rule
 list passes the gate but reviews nothing.
 
+The default baseline is the merge base with configured `merge_base_with`,
+otherwise `origin/HEAD`, local `main`, local `master`, then the root commit.
+Invalid configured targets fail. Successful review JSON includes `run_key` and
+`base_commit`; diff JSON uses `base_commit` as its only baseline field. Text
+identifies the baseline. Runs are separate per repository, branch and baseline;
+a changed baseline needs a fresh review even if its content fingerprint matches.
+Context subprocesses inherit the pinned SHA through `DRESSCODE_BASE_COMMIT`.
+
+Legacy run files remain untouched and cannot approve new baseline-keyed reviews.
+Review again after upgrading; counters, retirements and trust remain intact.
+After downgrading, run the legacy `dresscode reset` in each repository/branch
+before relying on its gate, then review again.
+
 Context commands run during `list`. Inspect repository-local commands before
 `dresscode trust`; they run with your permissions, not in a read-only sandbox.
 Untrusted, failed or timed-out context blocks the gate even if listing succeeds.

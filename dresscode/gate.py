@@ -22,6 +22,8 @@ class EntryDecision(TypedDict):
 class GateDecision(TypedDict):
     status: str
     entries: list[EntryDecision]
+    base_commit: str
+    run_key: str
 
 
 def review(
@@ -29,7 +31,7 @@ def review(
 ) -> tuple[ScopedDiff, RunState, GateDecision]:
     retired = EntryStore(config.repository).retirements()
     scoped = collect(config)
-    state = RunStore(config.repository).read()
+    state = RunStore(scoped.scope).read()
     decisions = []
     for entry in config.entries:
         if entry.id in retired:
@@ -60,7 +62,16 @@ def review(
     blocked = any(item["commands"] for item in decisions)
     waived = any(item["state"] == "waived" for item in decisions)
     status = "failed" if blocked else "passed-with-waivers" if waived else "passed"
-    return scoped, state, GateDecision(status=status, entries=decisions)
+    return (
+        scoped,
+        state,
+        GateDecision(
+            status=status,
+            entries=decisions,
+            base_commit=scoped.base_commit,
+            run_key=scoped.scope.run_key,
+        ),
+    )
 
 
 def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:

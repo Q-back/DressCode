@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from dresscode.config import Configuration
+from dresscode.diff import ResolvedScope
 from dresscode.entries import Entry
 from dresscode.run import ContextRecord, RunError, RunState
 
@@ -66,7 +67,9 @@ def required_context(
     )
 
 
-def execute(config: Configuration, entry: Entry, fingerprint: str) -> ContextRecord:
+def execute(
+    config: Configuration, entry: Entry, fingerprint: str, scope: ResolvedScope
+) -> ContextRecord:
     record = ContextRecord(
         state="context_untrusted",
         error="Run dresscode trust, then dresscode list.",
@@ -77,14 +80,18 @@ def execute(config: Configuration, entry: Entry, fingerprint: str) -> ContextRec
     if not trusted(config, entry):
         return record
     timeout = config.settings.get("context", {}).get("timeout_seconds", 10)
-    output, error = _capture(entry.context or "", config.repository.root, timeout)
+    output, error = _capture(
+        entry.context or "", config.repository.root, timeout, scope.base_commit
+    )
     record.update(
         state="context_failed" if error else "ready", context_output=output, error=error
     )
     return record
 
 
-def _capture(command: str, root: Path, timeout: float) -> tuple[str, str]:
+def _capture(
+    command: str, root: Path, timeout: float, base_commit: str
+) -> tuple[str, str]:
     stdout, stderr = b"", b""
     truncated = False
     deadline = time.monotonic() + timeout
@@ -95,6 +102,7 @@ def _capture(command: str, root: Path, timeout: float) -> tuple[str, str]:
                 command,
                 shell=True,
                 cwd=root,
+                env=os.environ | {"DRESSCODE_BASE_COMMIT": base_commit},
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 stdin=subprocess.DEVNULL,

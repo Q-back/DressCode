@@ -29,21 +29,21 @@ def test_missing_layers_are_empty_and_do_not_write(
 def test_each_layer_wins_in_priority_order(git_repo: Path, winner: str) -> None:
     repository = discover(git_repo)
     for name, paths in layer_paths(repository).items():
-        write_config(paths[0], f'base_ref = "{name}"\n')
+        write_config(paths[0], f'merge_base_with = "{name}"\n')
         if name == winner:
             break
 
-    assert load(repository).settings["base_ref"] == winner
+    assert load(repository).settings["merge_base_with"] == winner
 
 
 def test_directory_precedes_fallback_and_files_merge_in_name_order(
     git_repo: Path,
 ) -> None:
-    write_config(git_repo / ".dresscode.toml", 'base_ref = "ignored"\n')
-    write_config(git_repo / ".dresscode" / "a.toml", 'base_ref = "first"\n')
-    write_config(git_repo / ".dresscode" / "z.toml", 'base_ref = "last"\n')
+    write_config(git_repo / ".dresscode.toml", 'merge_base_with = "ignored"\n')
+    write_config(git_repo / ".dresscode" / "a.toml", 'merge_base_with = "first"\n')
+    write_config(git_repo / ".dresscode" / "z.toml", 'merge_base_with = "last"\n')
     write_config(git_repo / ".dresscode" / "ignored.txt", "invalid TOML [")
-    assert load(discover(git_repo)).settings["base_ref"] == "last"
+    assert load(discover(git_repo)).settings["merge_base_with"] == "last"
 
 
 def test_settings_tables_merge_and_lists_replace(git_repo: Path) -> None:
@@ -51,14 +51,14 @@ def test_settings_tables_merge_and_lists_replace(git_repo: Path) -> None:
     paths = layer_paths(repository)
     write_config(
         paths["global"][0],
-        'base_ref = "main"\n[context]\ntimeout_seconds = 10\n[diff]\nexclude = ["uv.lock"]\n',
+        'merge_base_with = "main"\n[context]\ntimeout_seconds = 10\n[diff]\nexclude = ["uv.lock"]\n',
     )
     write_config(
         paths["repo"][0],
         '[context]\ntimeout_seconds = 3\n[diff]\nexclude = ["vendor/"]\n',
     )
     assert load(repository).settings == {
-        "base_ref": "main",
+        "merge_base_with": "main",
         "context": {"timeout_seconds": 3},
         "diff": {"exclude": ["vendor/"]},
     }

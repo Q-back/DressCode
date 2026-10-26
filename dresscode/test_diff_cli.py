@@ -15,7 +15,7 @@ def test_diff_json_loads_config_and_preserves_fingerprint_across_commit(
 ) -> None:
     (xdg_home / "config/dresscode").mkdir()
     (xdg_home / "config/dresscode/config.toml").write_text(
-        'base_ref = "main"\n[diff]\nexclude = ["*.skip"]\n'
+        'merge_base_with = "main"\n[diff]\nexclude = ["*.skip"]\n'
     )
     (git_repo / "new.py").write_text("new\n")
     (git_repo / "uv.lock").write_text("included with explicit exclusions\n")
@@ -29,8 +29,8 @@ def test_diff_json_loads_config_and_preserves_fingerprint_across_commit(
     assert result.stderr == ""
     response = json.loads(result.stdout)
     assert response == {
-        "base_ref": "main",
-        "merge_base": git(git_repo, "rev-parse", "main"),
+        "run_key": response["run_key"],
+        "base_commit": git(git_repo, "rev-parse", "main"),
         "fingerprint": response["fingerprint"],
         "files": [
             {"path": "new.py", "added": 1, "removed": 0},
@@ -58,7 +58,7 @@ def test_diff_text_reports_base_counts_and_totals(
     assert result.exit_code == 0, result.output
     assert "2\t0\tnew.py" in result.stdout
     assert result.stdout.splitlines()[-1] == "2\t0\tTOTAL"
-    assert "Base: main" in (result.stderr if numstat else result.stdout)
+    assert "Base: " in (result.stderr if numstat else result.stdout)
     assert "\x1b" not in result.output
     if numstat:
         assert result.stdout.splitlines() == ["2\t0\tnew.py", "2\t0\tTOTAL"]
@@ -130,7 +130,9 @@ def test_untracked_nested_repository_has_an_actionable_error(
     assert json.loads(excluded.stdout)["files"] == []
 
 
-@pytest.mark.parametrize("config", ['base_ref = "missing"', "[diff]\nexclude = false"])
+@pytest.mark.parametrize(
+    "config", ['merge_base_with = "missing"', "[diff]\nexclude = false"]
+)
 def test_invalid_diff_configuration_returns_json_error(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch, config: str
 ) -> None:
