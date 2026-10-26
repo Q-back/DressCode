@@ -100,9 +100,16 @@ def _render_entry(console: Console, entry: dict[str, Any]) -> None:
     console.print(heading)
     _render_field(console, "Question", entry["question"], style="dim")
     verdict = entry["verdict"] or "unanswered"
+    verdict_color = color
+    if (
+        entry["state"] == "stale"
+        and verdict in ("yes", "no")
+        and verdict == entry["expected"]
+    ):
+        verdict_color = "green"
     if verdict in ("yes", "no") and verdict != entry["expected"]:
         verdict += f" (expected {entry['expected']})"
-    _render_field(console, "Verdict", verdict, style=f"bold {color}")
+    _render_field(console, "Verdict", verdict, style=f"bold {verdict_color}")
     if entry["verdict"] is not None:
         _render_field(console, "Evidence", entry["evidence"], stacked=True)
     if "context_output" in entry:

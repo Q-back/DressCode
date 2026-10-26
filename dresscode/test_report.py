@@ -110,6 +110,7 @@ def test_report_blocks_preserve_fields_and_wrapping(
         ("violated", "yes", "no", "red", " (expected no)"),
         ("violated", "no", "yes", "red", " (expected yes)"),
         ("stale", "no", "yes", "yellow", " (expected yes)"),
+        ("stale", "n-a", "yes", "yellow", ""),
         ("waived", "yes", "no", "yellow", " (expected no)"),
         ("context_failed", None, None, "red", ""),
         ("context_untrusted", None, None, "yellow", ""),
@@ -160,6 +161,40 @@ def test_report_styles_follow_state_and_field_roles(
     else:
         assert "expected" not in text.plain and "Reveal:" not in text.plain
     assert "Expected:" not in text.plain
+
+
+@pytest.mark.parametrize("verdict", ["yes", "no"])
+@pytest.mark.parametrize("width", [40, 80])
+def test_matching_stale_verdict_is_green_with_yellow_state(
+    monkeypatch: pytest.MonkeyPatch,
+    summary: dict[str, Any],
+    verdict: str,
+    width: int,
+) -> None:
+    summary["entries"] = [
+        {
+            "id": "fruit",
+            "question": "Sorted?",
+            "state": "stale",
+            "verdict": verdict,
+            "expected": verdict,
+            "evidence": "Reviewed catalog.",
+            "reveal": "Sort names.",
+        }
+    ]
+    rendered, console = output(monkeypatch, summary, width, color=True)
+    text = Text.from_ansi(rendered)
+    assert f"Verdict: {verdict}" in text.plain
+    assert "expected" not in text.plain
+    for value, color in (
+        ("Verdict:", "green"),
+        (f" {verdict}", "green"),
+        ("[stale]", "yellow"),
+    ):
+        style = text.get_style_at_offset(console, text.plain.index(value))
+        assert style.bold is True
+        assert style.color is not None
+        assert style.color.number == Color.parse(color).number
 
 
 @pytest.mark.parametrize(

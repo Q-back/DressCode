@@ -251,6 +251,7 @@ Bold, colored headings and verdicts lead to a prominent Evidence label and
 indented evidence. Question and Reveal stay visible with muted styling.
 Matching answers and `n-a` keep a compact verdict; conflicting yes/no answers
 add the expectation inline, such as `Verdict: no (expected yes)`.
+A matching yes/no verdict stays green when stale; its `[stale]` state stays yellow.
 Unanswered rules show `Verdict: unanswered` without sealed fields. Recorded
 context and context errors stay in their rule's block. Waivers and their reasons
 have a separate section, with stale waivers labeled. Separators, labels and

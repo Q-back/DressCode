@@ -69,6 +69,12 @@ The system SHALL provide `dresscode report`, printing a colored summary: overall
 - **THEN** `passed` entries are styled as satisfied even when the answer is `no`, and `violated` entries are styled as violations even when the answer is `yes`
 - **AND** stale or waived entries are visually distinguished from current satisfied entries
 
+#### Scenario: Matching stale verdict stays green
+
+- **WHEN** a stale recorded yes/no verdict matches its expected answer
+- **THEN** its verdict is green
+- **AND** the rule heading keeps a yellow `[stale]` state and the gate still treats the answer as stale
+
 #### Scenario: Recorded evidence remains visible when stale
 
 - **WHEN** an entry has a stale recorded verdict

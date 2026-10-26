@@ -45,11 +45,13 @@ A table would squeeze long evidence into a column. Enclosing panels would consum
 
 Compose Rich `Text` values rather than interpolating user text into Rich markup. Use bold cyan for rule headings, bold for field labels, and normal contrast for evidence and recorded context. Apply Rich's dim attribute to Question and Reveal, including their labels; do not remove or collapse either field.
 
-Use the entry's current state for verdict/state styling:
+Use the entry's current state for state styling and the default verdict styling:
 
 - `passed`: green, including a satisfied `no` or `n-a` answer.
 - `violated` and `context_failed`: red.
 - `stale`, `unanswered`, `waived` and `context_untrusted`: yellow.
+
+A stale yes/no verdict that matches its expected answer is green. Its `[stale]` state remains yellow. Stale conflicting and `n-a` verdicts retain yellow styling.
 
 Keep the state visible as text beside the rule ID. Use red, green and yellow respectively for the overall `failed`, `passed` and `passed-with-waivers` statuses. Color reinforces labels; it never replaces them. Avoid dimming the entire entry or its evidence.
 
@@ -69,7 +71,7 @@ Add focused renderer tests at controlled widths, with terminal styling enabled a
 
 - More vertical space per rule -> Keep the verdict on one logical line and avoid redundant expectation/state labels. The added space is deliberate separation.
 - Muted text can become hard to read -> Dim only Question and Reveal; keep evidence, verdicts and warnings at normal contrast or stronger.
-- A stale recorded `yes` could look like a current pass -> Let current state control styling and keep `[stale]` visible in the heading.
+- A green stale verdict could look like a current pass -> Keep `[stale]` yellow and visible in the heading; gate decisions still reject stale answers.
 - Narrow terminals can split headings and long paths -> Allow wrapping and test 40- and 80-column output, including full baseline IDs and multiline evidence.
 - Exact ANSI snapshots can be brittle -> Assert semantic styling and grouping rather than incidental escape-code ordering or separator length.
 
