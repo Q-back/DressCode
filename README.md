@@ -1,6 +1,10 @@
 # DressCode
 
-DressCode is a CLI that remembers the mistakes an AI coding agent actually makes and hands them back as questions before task hand-over. Questions are boolean, the wanted answer is sealed until the reviewer has committed to one, and `dresscode check` stays red until every question is answered as expected or the violation is documented with a reason.
+DressCode is a CLI that turns recurring AI coding-agent mistakes into yes/no
+code-review questions. The expected answer stays sealed until the reviewer records
+a verdict. When only reviewing code, record answers and report findings. When
+changing code, use `dresscode check` to require passing answers or documented
+exceptions before you're done.
 
 ## Installation
 
@@ -42,9 +46,16 @@ Run the installed `dresscode` command from the target Git repository. Configure
 questions using `dresscode add` or the TOML layers below; no questions are seeded.
 
 ```text
-implement → list → fresh-context reviewer → answer → check → report
-                                             ↘ waive ↗
+list → fresh-context reviewer → answer → report
 ```
+
+- **Changing code?** Run tests first. Fix the problems or record explicitly
+  accepted exceptions, obtain new verdicts after edits, and require
+  `dresscode check` to pass before you're done.
+- **Only reviewing code?** Answer every question with evidence and report the
+  problems. Do not fix code or add waivers just to finish the review; a passing
+  `check` is not required. Surface unanswered questions, stale answers, context
+  failures and command errors rather than treating them as completed checks.
 
 Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`.
 
@@ -222,7 +233,10 @@ listing them instead of accepting a documented violation.
 and reveals for answered entries, with waivers and their reasons in a separate
 section. Stale waivers are labeled. Redirected output has no ANSI colors.
 `report --json` includes `status`, `run_key`, `diff`, `entries` and `waivers`.
-Reporting a blocked run succeeds; use `check` to enforce the gate.
+Reporting a blocked run succeeds; a report with status `failed` can contain
+review findings, unanswered questions or other blockers. A successful report
+command does not prove the review is complete or the code passes. Use `check`
+when the code must pass before you're done.
 
 | Exit | Meaning |
 |---|---|
@@ -230,9 +244,10 @@ Reporting a blocked run succeeds; use `check` to enforce the gate.
 | `1` | `check` needs action; strict mode also rejects waivers |
 | `2` | Usage, configuration, state or environment error |
 
-Require a fresh-context reviewer and a successful `dresscode check` **before
-final task hand-over**, through `AGENTS.md` or the harness. Intermediate commits
-remain unrestricted, and DressCode does not install or require Git hooks.
+When changing code, require a fresh-context reviewer and a successful
+`dresscode check` **before calling the changes done**, through `AGENTS.md` or the
+harness. Intermediate commits remain unrestricted, and DressCode does not install
+or require Git hooks.
 A green gate means the recorded answers satisfy the current entries; it does not
 prove reviewer independence. Strict mode adds a no-waiver requirement.
 
@@ -241,7 +256,7 @@ prove reviewer independence. Strict mode adds a no-waiver requirement.
 Add this to a target project's `AGENTS.md` or equivalent harness instructions:
 
 ```text
-Before declaring a coding task done, request a fresh-context reviewer who has
+Before declaring code changes done, request a fresh-context reviewer who has
 not seen the implementation transcript. Give it the final cumulative diff
 (including uncommitted work) and the questions from dresscode list --json,
 not the sealed expectations or reveals. Record every answer with evidence
@@ -251,6 +266,11 @@ Require dresscode check to exit 0 before hand-over, and show dresscode report.
 If the reviewed diff changes, obtain current answers before checking again.
 Intermediate commits do not need current DressCode verdicts.
 A passing check records answers; it does not prove reviewer independence.
+
+When only reviewing code, record every answer with evidence and report problems.
+Do not fix code or add waivers just to finish the review, and do not require
+dresscode check to pass. Surface unanswered questions, stale answers, context
+failures and command errors instead of treating them as completed checks.
 ```
 
 Use `dresscode check --strict` instead when the project must reject waivers.
@@ -353,6 +373,13 @@ GitHub Actions runs these checks on Ubuntu for every push and pull request, usin
 
 DressCode is a pure CLI over a state store plus git. It never spawns agents, never calls a model, never edits code.
 
-`AGENTS.md` or the harness instructions require a fresh-context review and a passing `dresscode check` before the agent declares the task done. Intermediate commits do not need to pass DressCode: the gate covers the final cumulative diff, including uncommitted work, not individual commits. DressCode does not install or require Git hooks. V0 gates recorded answers against the current diff; passing is not proof of independent review. `dresscode check --strict` additionally rejects waivers.
+For code changes, `AGENTS.md` or the harness instructions require a fresh-context
+review and a passing `dresscode check` before the agent declares the changes done.
+When only reviewing code, report findings without requiring fixes, waivers or a
+passing gate. Intermediate commits do not need to pass DressCode: the gate covers
+the final cumulative diff, including uncommitted work, not individual commits.
+DressCode does not install or require Git hooks. V0 gates recorded answers against
+the current diff; passing is not proof of independent review.
+`dresscode check --strict` additionally rejects waivers.
 
 State is global, never in the repo: run state under `$XDG_STATE_HOME/dresscode/`, keyed by repo and branch. Config is layered — private per-repo, then the repo's own `.dresscode/`, then your global defaults.

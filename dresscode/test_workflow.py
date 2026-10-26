@@ -128,6 +128,42 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
     assert expired["diff"]["fingerprint"] != scoped["fingerprint"]
 
 
+def test_review_reports_violations_without_fixes_or_waivers(workflow_repo: Path):
+    root = workflow_repo
+    cli(root, "trust")
+    (root / "change.txt").write_text("A change to review without fixing it.\n")
+    status_before = git(root, "status", "--porcelain=v1", "--untracked-files=all")
+    fingerprint = document(root, "diff")["fingerprint"]
+    listed = document(root, "list")["entries"]
+    verdicts = {
+        "size": ("yes", "The diff adds one line."),
+        "side-effects": ("yes", "The change adds an output file."),
+        "python": ("n-a", "The change contains no Python."),
+    }
+    assert {entry["id"] for entry in listed} == set(verdicts)
+    for identifier, (verdict, evidence) in verdicts.items():
+        document(root, "answer", identifier, f"--{verdict}", "--evidence", evidence)
+
+    summary = document(root, "report")
+    assert summary["status"] == "failed"
+    assert summary["waivers"] == []
+    assert {entry["id"]: entry["state"] for entry in summary["entries"]} == {
+        "size": "passed",
+        "side-effects": "violated",
+        "python": "passed",
+    }
+    for entry in summary["entries"]:
+        verdict, evidence = verdicts[entry["id"]]
+        assert entry["verdict"] == verdict
+        assert entry["evidence"] == evidence
+    assert summary["diff"]["fingerprint"] == fingerprint
+    assert document(root, "check", code=1)["status"] == "failed"
+    assert document(root, "check", "--strict", code=1)["status"] == "failed"
+    assert (
+        git(root, "status", "--porcelain=v1", "--untracked-files=all") == status_before
+    )
+
+
 def test_unwaived_review_passes_both_gates_and_reports_evidence(workflow_repo: Path):
     root = workflow_repo
     cli(root, "trust")
