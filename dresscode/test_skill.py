@@ -121,3 +121,41 @@ def test_skill_rule_example_can_be_created_and_reviewed(
     assert runner.invoke(app, ["check", "--strict"]).exit_code == 0
     (git_repo / "change.txt").write_text("Changed after review.\n")
     assert runner.invoke(app, ["check"]).exit_code == 1
+
+
+@pytest.mark.parametrize("source", ["README.md", "skill"])
+def test_documented_scoped_workflow_runs_with_pinned_metadata(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch, source: str
+) -> None:
+    from dresscode.test_diff import git
+
+    monkeypatch.chdir(git_repo)
+    for index in range(2):
+        git(git_repo, "commit", "--allow-empty", "-m", f"Commit {index}")
+    identifier = "shared-builder" if source == "skill" else "test-factory"
+    added = runner.invoke(
+        app, ["add", identifier, "--question", "Reuse?", "--expects", "true"]
+    )
+    assert added.exit_code == 0, added.output
+    text = (
+        skill_text()
+        if source == "skill"
+        else (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    )
+    section = text.split("## Review an exact commit", 1)[1]
+    example = re.search(r"```sh\n(.*?)\n```", section, re.DOTALL)
+    assert example is not None
+    result = subprocess.run(
+        ["sh", "-eu", "-c", example[1]],
+        cwd=git_repo,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    baseline = git(git_repo, "rev-parse", "HEAD~2")
+    assert baseline in result.stdout
+    reset = runner.invoke(app, ["check", "--base", baseline, "--json"])
+    assert reset.exit_code == 1
+    assert "unanswered" in reset.stdout

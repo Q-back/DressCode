@@ -5,7 +5,7 @@ from typing import NotRequired, TypedDict
 
 from dresscode.config import Configuration
 from dresscode.context import required_context
-from dresscode.diff import ScopedDiff, collect
+from dresscode.diff import ResolvedScope, ScopedDiff, collect
 from dresscode.entries import Entry
 from dresscode.run import RunState, RunStore
 from dresscode.store import EntryStore
@@ -22,21 +22,23 @@ class EntryDecision(TypedDict):
 class GateDecision(TypedDict):
     status: str
     entries: list[EntryDecision]
+    base_commit: str
+    run_key: str
 
 
 def review(
-    config: Configuration, strict: bool = False
+    config: Configuration, strict: bool = False, scope: ResolvedScope | None = None
 ) -> tuple[ScopedDiff, RunState, GateDecision]:
     retired = EntryStore(config.repository).retirements()
-    scoped = collect(config)
-    state = RunStore(config.repository).read()
+    scoped = collect(config, scope)
+    state = RunStore(scoped.scope).read()
     decisions = []
     for entry in config.entries:
         if entry.id in retired:
             continue
         status = entry_state(entry, state, scoped.fingerprint)
         context = (
-            required_context(config, entry, state, scoped.fingerprint)
+            required_context(config, entry, state, scoped.fingerprint, scoped.scope)
             if entry.context is not None
             else None
         )
@@ -50,17 +52,28 @@ def review(
             id=entry.id,
             question=entry.question,
             state=status,
-            commands=fixing_commands(entry.id, status, strict),
+            commands=fixing_commands(entry.id, status, strict, scoped.base_commit),
         )
         if context is not None and context["state"] != "ready":
             decision["error"] = context["error"]
             if context["state"] == "unanswered":
-                decision["commands"].insert(0, "dresscode list")
+                decision["commands"].insert(
+                    0, f"dresscode list --base {scoped.base_commit}"
+                )
         decisions.append(decision)
     blocked = any(item["commands"] for item in decisions)
     waived = any(item["state"] == "waived" for item in decisions)
     status = "failed" if blocked else "passed-with-waivers" if waived else "passed"
-    return scoped, state, GateDecision(status=status, entries=decisions)
+    return (
+        scoped,
+        state,
+        GateDecision(
+            status=status,
+            entries=decisions,
+            base_commit=scoped.base_commit,
+            run_key=scoped.scope.run_key,
+        ),
+    )
 
 
 def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:
@@ -83,15 +96,20 @@ def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:
     return "violated"
 
 
-def fixing_commands(identifier: str, state: str, strict: bool) -> list[str]:
+def fixing_commands(
+    identifier: str, state: str, strict: bool, base_commit: str
+) -> list[str]:
     if state == "passed" or (state == "waived" and not strict):
         return []
     identifier = quote(identifier)
-    commands = [f"dresscode answer --yes|--no|--n-a --evidence <text> -- {identifier}"]
+    selection = f"--base {base_commit}"
+    commands = [
+        f"dresscode answer {selection} --yes|--no|--n-a --evidence <text> -- {identifier}"
+    ]
     if state == "violated":
-        commands.append(f"dresscode waive --reason <text> -- {identifier}")
+        commands.append(f"dresscode waive {selection} --reason <text> -- {identifier}")
     if state == "context_failed":
-        commands.insert(0, "dresscode list")
+        commands.insert(0, f"dresscode list {selection}")
     if state == "context_untrusted":
-        commands[0:0] = ["dresscode trust", "dresscode list"]
+        commands[0:0] = ["dresscode trust", f"dresscode list {selection}"]
     return commands

@@ -1,10 +1,9 @@
-"""Repository- and branch-keyed review state."""
+"""Baseline-keyed review state."""
 
 import fcntl
 import hashlib
 import json
 import os
-import subprocess
 import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -12,8 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, NotRequired, TypedDict, cast
 
+from dresscode.diff import ResolvedScope
 from dresscode.entries import Entry
-from dresscode.repo import Repository
 
 
 class RunError(ValueError):
@@ -56,10 +55,10 @@ class RunState(TypedDict):
 
 
 class RunStore:
-    """Read and atomically update one repository-and-branch review run."""
+    """Read and atomically update one resolved review run."""
 
-    def __init__(self, repository: Repository) -> None:
-        self.run_key = _run_key(repository)
+    def __init__(self, scope: ResolvedScope) -> None:
+        self.run_key = scope.run_key
         home = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
         filename = hashlib.sha256(self.run_key.encode()).hexdigest() + ".json"
         self.path = home / "dresscode" / "runs" / filename
@@ -270,31 +269,3 @@ def _valid_state(document: object, run_key: str) -> bool:
     ):
         return False
     return all(isinstance(identifier, str) for identifier in verdicts)
-
-
-def _run_key(repository: Repository) -> str:
-    branch = _git(
-        repository.root,
-        "symbolic-ref",
-        "--quiet",
-        "--short",
-        "HEAD",
-        allowed_codes=(0, 1),
-    )
-    if branch:
-        return f"{repository.identity}:{branch}"
-    short_sha = _git(repository.root, "rev-parse", "--short", "HEAD")
-    return f"{repository.identity}:detached-{short_sha}"
-
-
-def _git(root: Path, *arguments: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
-    try:
-        result = subprocess.run(
-            ["git", *arguments], cwd=root, capture_output=True, text=True, check=False
-        )
-    except OSError as error:
-        raise RunError(f"Cannot run Git at {root}: {error}") from error
-    if result.returncode not in allowed_codes:
-        message = result.stderr.strip() or result.stdout.strip()
-        raise RunError(f"Git at {root}: {message}")
-    return result.stdout.strip()

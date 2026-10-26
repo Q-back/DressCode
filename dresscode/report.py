@@ -44,10 +44,9 @@ def summarize(
             )
     return {
         "status": decision["status"],
-        "run_key": state["run_key"],
+        **scoped.scope.metadata(),
         "diff": {
-            "base_ref": scoped.base_ref,
-            "merge_base": scoped.merge_base,
+            "base_commit": scoped.base_commit,
             "fingerprint": scoped.fingerprint,
             "added": scoped.added,
             "removed": scoped.removed,
@@ -64,7 +63,7 @@ def render(summary: dict[str, Any]) -> None:
     diff = summary["diff"]
     console.print(
         Text.from_ansi(
-            f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_ref']})"
+            f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_commit']})"
         )
     )
     for entry in summary["entries"]:

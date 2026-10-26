@@ -11,7 +11,7 @@ from dresscode.authoring import append_entry
 from dresscode.config import Configuration, ConfigurationError, load
 from dresscode.context import execute, required_context
 from dresscode.context import trust as trust_context
-from dresscode.diff import DiffError, collect
+from dresscode.diff import DiffError, collect, resolve_scope
 from dresscode.entries import Entry
 from dresscode.gate import review
 from dresscode.repo import Repository, RepositoryError, discover
@@ -21,6 +21,14 @@ from dresscode.store import EntryStore, StoreError
 
 JsonOutput = Annotated[
     bool, typer.Option("--json", help="Emit a single JSON document.")
+]
+
+BaseSelection = Annotated[
+    str | None,
+    typer.Option(
+        "--base",
+        help="Compare with this exact commit/ref; overrides inherited and default baselines.",
+    ),
 ]
 
 app = typer.Typer(
@@ -123,19 +131,21 @@ def retire(identifier: str, reason: str = "", json_output: JsonOutput = False) -
 
 
 @app.command("list", help="List sealed questions with trusted context evidence.")
-def list_entries(json_output: JsonOutput = False) -> None:
+def list_entries(json_output: JsonOutput = False, base: BaseSelection = None) -> None:
     config = configuration(json_output)
     try:
         retired = EntryStore(config.repository).retirements()
         active = [entry for entry in config.entries if entry.id not in retired]
         contextual = [entry for entry in active if entry.context is not None]
+        scope = resolve_scope(config, base)
         contexts = {}
         if contextual:
-            fingerprint = collect(config).fingerprint
+            fingerprint = collect(config, scope).fingerprint
             contexts = {
-                entry.id: execute(config, entry, fingerprint) for entry in contextual
+                entry.id: execute(config, entry, fingerprint, scope)
+                for entry in contextual
             }
-            RunStore(config.repository).save_contexts(contexts)
+            RunStore(scope).save_contexts(contexts)
     except (StoreError, RunError, DiffError) as error:
         fail(str(error), json_output)
     entries = []
@@ -148,9 +158,10 @@ def list_entries(json_output: JsonOutput = False) -> None:
             )
         entries.append(item)
     typer.echo(
-        json.dumps({"entries": entries})
+        json.dumps({**scope.metadata(), "entries": entries})
         if json_output
-        else "\n".join(
+        else f"Base: {scope.base_commit}\n"
+        + "\n".join(
             f"{entry['id']}: {entry['question']}"
             + (
                 f"\n  Context: {entry['context_output']}"
@@ -177,6 +188,7 @@ def answer(
     ] = False,
     evidence: Annotated[str, typer.Option("--evidence")] = "",
     json_output: JsonOutput = False,
+    base: BaseSelection = None,
 ) -> None:
     config = configuration(json_output)
     selected = sum((yes, no, not_applicable))
@@ -199,7 +211,7 @@ def answer(
     if entry is None:
         fail(f"Unknown entry: {identifier}", json_output)
     try:
-        scoped = collect(config)
+        scoped = collect(config, resolve_scope(config, base))
     except DiffError as error:
         fail(str(error), json_output)
     verdict = "n-a" if not_applicable else "yes" if yes else "no"
@@ -207,10 +219,12 @@ def answer(
     expected = "yes" if entry.expects else "no"
     matched = verdict == "n-a" or verdict == expected
     try:
-        run = RunStore(config.repository)
+        run = RunStore(scoped.scope)
         context_output = None
         if entry.context is not None:
-            context = required_context(config, entry, run.read(), scoped.fingerprint)
+            context = required_context(
+                config, entry, run.read(), scoped.fingerprint, scoped.scope
+            )
             if context["state"] != "ready":
                 fail(context["error"], json_output)
             context_output = context["context_output"]
@@ -228,6 +242,7 @@ def answer(
     except (RunError, StoreError) as error:
         fail(str(error), json_output)
     response = {
+        **scoped.scope.metadata(),
         "status": "recorded",
         "id": identifier,
         "verdict": verdict,
@@ -241,6 +256,7 @@ def answer(
     if json_output:
         typer.echo(json.dumps(response))
         return
+    typer.echo(f"Base: {scoped.base_commit}")
     typer.echo(
         f"Recorded {identifier}: {verdict} (expected {expected}; "
         f"matched: {'yes' if matched else 'no'})."
@@ -253,15 +269,17 @@ def answer(
 def check(
     strict: Annotated[bool, typer.Option(help="Reject waivers too.")] = False,
     json_output: JsonOutput = False,
+    base: BaseSelection = None,
 ) -> None:
     config = configuration(json_output)
     try:
-        _, state, decision = review(config, strict)
+        _, state, decision = review(config, strict, resolve_scope(config, base))
     except (DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     if json_output:
         typer.echo(json.dumps(decision))
     else:
+        typer.echo(f"Base: {decision['base_commit']}")
         typer.echo(decision["status"])
         for entry in decision["entries"]:
             if entry["commands"]:
@@ -280,6 +298,7 @@ def waive(
     identifier: str,
     reason: Annotated[str, typer.Option("--reason")] = "",
     json_output: JsonOutput = False,
+    base: BaseSelection = None,
 ) -> None:
     config = configuration(json_output)
     try:
@@ -294,22 +313,24 @@ def waive(
         )
         if entry is None:
             fail(f"Unknown entry: {identifier}", json_output)
-        scoped = collect(config)
-        waiver = RunStore(config.repository).waive(entry, reason, scoped.fingerprint)
+        scoped = collect(config, resolve_scope(config, base))
+        waiver = RunStore(scoped.scope).waive(entry, reason, scoped.fingerprint)
     except (DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     typer.echo(
-        json.dumps({"status": "waived", "id": identifier, **waiver})
+        json.dumps(
+            {**scoped.scope.metadata(), "status": "waived", "id": identifier, **waiver}
+        )
         if json_output
-        else f"Waived {identifier}: {waiver['reason']}"
+        else f"Base: {scoped.base_commit}\nWaived {identifier}: {waiver['reason']}"
     )
 
 
 @app.command("report", help="Summarize verdicts, evidence and waivers.")
-def report(json_output: JsonOutput = False) -> None:
+def report(json_output: JsonOutput = False, base: BaseSelection = None) -> None:
     config = configuration(json_output)
     try:
-        scoped, state, decision = review(config)
+        scoped, state, decision = review(config, scope=resolve_scope(config, base))
     except (DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     summary = summarize(config, scoped, state, decision)
@@ -320,17 +341,18 @@ def report(json_output: JsonOutput = False) -> None:
 
 
 @app.command("reset", help="Clear the current review run.")
-def reset(json_output: JsonOutput = False) -> None:
+def reset(json_output: JsonOutput = False, base: BaseSelection = None) -> None:
     config = configuration(json_output)
     try:
-        run = RunStore(config.repository)
+        scope = resolve_scope(config, base)
+        run = RunStore(scope)
         run.reset()
-    except RunError as error:
+    except (RunError, DiffError) as error:
         fail(str(error), json_output)
     typer.echo(
-        json.dumps({"status": "reset", "run_key": run.run_key})
+        json.dumps({"status": "reset", **scope.metadata()})
         if json_output
-        else f"Reset review run {run.run_key}"
+        else f"Base: {scope.base_commit}\nReset review run {run.run_key}"
     )
 
 
@@ -340,33 +362,45 @@ def reset(json_output: JsonOutput = False) -> None:
         "Show file counts from the merge base of HEAD and the selected base "
         "to the working tree. Includes committed, staged, unstaged and untracked "
         "non-ignored files. Configured diff exclusions apply.\n\n"
-        "Base priority: configured base_ref, origin/HEAD, local main, local master, "
-        "then the root commit. An invalid configured base_ref is an error, "
-        "not a fallback."
+        "Base priority: configured merge_base_with, origin/HEAD, local main, local master, "
+        "then the root commit. An invalid configured merge_base_with is an error, "
+        "not a fallback. REF or --base selects an exact commit, even with unrelated "
+        "history, and bypasses the default target. Explicit selection wins over "
+        "inherited DRESSCODE_BASE_COMMIT, then defaults. Supplying both selectors "
+        "is an error."
     ),
 )
 def show_diff(
+    reference: Annotated[
+        str | None, typer.Argument(help="Exact baseline; shorthand for --base.")
+    ] = None,
     numstat: Annotated[
         bool, typer.Option(help="Emit tab-separated counts and paths.")
     ] = False,
     json_output: JsonOutput = False,
+    base: BaseSelection = None,
 ) -> None:
+    if reference is not None and base is not None:
+        fail("Cannot supply both REF and --base", json_output)
+    selected = reference if reference is not None else base
     config = configuration(json_output)
     try:
-        scoped = collect(config)
+        scoped = collect(config, resolve_scope(config, selected))
     except DiffError as error:
         fail(str(error), json_output)
     if json_output:
         typer.echo(
             json.dumps(
                 {
-                    **asdict(scoped),
+                    **scoped.scope.metadata(),
+                    "files": [asdict(file) for file in scoped.files],
+                    "fingerprint": scoped.fingerprint,
                     "totals": {"added": scoped.added, "removed": scoped.removed},
                 }
             )
         )
         return
-    typer.echo(f"Base: {scoped.base_ref} (merge base {scoped.merge_base})", err=numstat)
+    typer.echo(f"Base: {scoped.base_commit}", err=numstat)
     if not numstat:
         typer.echo("Added\tRemoved\tPath")
     for file in scoped.files:

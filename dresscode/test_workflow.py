@@ -6,8 +6,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 
 def git(root: Path, *arguments: str) -> str:
     return subprocess.run(
@@ -31,24 +29,6 @@ def cli(root: Path, *arguments: str, code: int = 0) -> subprocess.CompletedProce
 
 def document(root: Path, *arguments: str, code: int = 0) -> dict[str, Any]:
     return json.loads(cli(root, *arguments, "--json", code=code).stdout)
-
-
-@pytest.fixture
-def workflow_repo(git_repo: Path) -> Path:
-    (git_repo / ".dresscode.toml").write_text(
-        '[[entries]]\nid = "size"\nquestion = "Is this a small change?"\n'
-        'expects = true\nreveal = "Keep reviews manageable."\n'
-        'context = "dresscode diff --numstat"\n'
-        '[[entries]]\nid = "side-effects"\nquestion = "Were side effects added?"\n'
-        'expects = false\nreveal = "Keep transformations pure."\n'
-        '[[entries]]\nid = "python"\nquestion = "Are Python types checked?"\n'
-        'expects = true\nreveal = "Check Python types when applicable."\n'
-    )
-    git(git_repo, "add", ".dresscode.toml")
-    git(git_repo, "commit", "-m", "Configure review questions")
-    git(git_repo, "branch", "--force", "main", "HEAD")
-    git(git_repo, "config", "--unset", "core.hooksPath")
-    return git_repo
 
 
 def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Path):

@@ -35,7 +35,7 @@ def test_configured_base_precedes_remote_and_local_defaults(git_repo: Path) -> N
 
 @pytest.mark.parametrize("configured", ["missing", "--help", "", False, []])
 def test_invalid_explicit_base_is_an_error(git_repo: Path, configured: object) -> None:
-    with pytest.raises(DiffError, match="base_ref"):
+    with pytest.raises(DiffError, match="merge_base_with"):
         resolve_base(git_repo, configured)
 
 
@@ -61,7 +61,7 @@ def test_cumulative_working_tree_and_untracked_scope(git_repo: Path) -> None:
 
     result = scope(git_repo)
 
-    assert result.base_ref == "main"
+    assert result.base_commit == git(git_repo, "rev-parse", "main")
     assert [(file.path, file.added, file.removed) for file in result.files] == [
         ("README.md", 2, 1),
         ("new.py", 2, 0),
@@ -81,7 +81,7 @@ def test_base_moving_on_does_not_enter_the_diff(git_repo: Path) -> None:
     git(git_repo, "add", ".")
     git(git_repo, "commit", "--message", "Feature change")
     result = scope(git_repo)
-    assert result.merge_base == initial
+    assert result.base_commit == initial
     assert [file.path for file in result.files] == ["feature.py"]
 
 
@@ -187,11 +187,11 @@ def test_index_removal_preserves_symlink_baseline(git_repo: Path) -> None:
     git(git_repo, "commit", "--message", "Link baseline")
     path.unlink()
     path.symlink_to("new-target")
-    before = scope(git_repo, base_ref="HEAD")
+    before = scope(git_repo, merge_base_with="HEAD")
     git(git_repo, "rm", "--cached", "link")
-    assert scope(git_repo, base_ref="HEAD") == before
+    assert scope(git_repo, merge_base_with="HEAD") == before
     git(git_repo, "add", "link")
-    assert scope(git_repo, base_ref="HEAD") == before
+    assert scope(git_repo, merge_base_with="HEAD") == before
 
 
 @pytest.mark.parametrize("edit_content", [False, True], ids=["ignored-chmod", "edited"])
@@ -208,12 +208,12 @@ def test_index_removal_preserves_ignored_executable_baseline(
         path.write_text("new\n")
     else:
         path.chmod(0o644)
-    before = scope(git_repo, base_ref="HEAD")
+    before = scope(git_repo, merge_base_with="HEAD")
     git(git_repo, "rm", "--cached", "script.sh")
-    assert scope(git_repo, base_ref="HEAD") == before
+    assert scope(git_repo, merge_base_with="HEAD") == before
     git(git_repo, "add", "script.sh")
     assert git(git_repo, "ls-files", "--stage", "script.sh").startswith("100644 ")
-    assert scope(git_repo, base_ref="HEAD").fingerprint != before.fingerprint
+    assert scope(git_repo, merge_base_with="HEAD").fingerprint != before.fingerprint
 
 
 def test_binary_and_unusual_paths_survive_staging(git_repo: Path) -> None:

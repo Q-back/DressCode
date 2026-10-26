@@ -82,7 +82,7 @@ def test_diff_help_explains_scope_and_base_priority(
     assert "working tree" in help_text
     assert "committed, staged, unstaged and untracked non-ignored files" in help_text
     assert (
-        "configured base_ref, origin/HEAD, local main, local master, then the root commit"
+        "configured merge_base_with, origin/HEAD, local main, local master, then the root commit"
         in help_text
     )
     assert "Configured diff exclusions apply" in help_text

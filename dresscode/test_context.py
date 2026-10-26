@@ -9,7 +9,8 @@ from typer.testing import CliRunner
 
 from dresscode import context
 from dresscode.cli import app
-from dresscode.config import layer_paths
+from dresscode.config import layer_paths, load
+from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.run import RunStore
 
@@ -121,7 +122,9 @@ def test_answer_preserves_delivered_output_without_rerunning(
     invoke("list")
     invoke("answer", "size", "--yes", "--evidence", "Reviewed")
     assert (
-        RunStore(discover(git_repo)).read()["verdicts"]["size"]["context_output"]
+        RunStore(resolve_scope(load(discover(git_repo)))).read()["verdicts"]["size"][
+            "context_output"
+        ]
         == "first"
     )
     (git_repo / "new.py").write_text("changed")
@@ -237,7 +240,9 @@ def test_capture_error_is_structured_and_reaps_process(
 
     monkeypatch.setattr(context.subprocess, "Popen", popen)
     monkeypatch.setattr(context.selectors.DefaultSelector, method, fail_selector)
-    output, error = context._capture("sleep 30", git_repo, 10)
+    output, error = context._capture(
+        "sleep 30", git_repo, 10, resolve_scope(load(discover(git_repo))).base_commit
+    )
     assert output == ""
     assert "selector unavailable" in error
     assert processes[0].poll() is not None

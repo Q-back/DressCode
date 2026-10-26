@@ -80,12 +80,12 @@ Configuration is optional and read from lowest to highest priority:
 
 `XDG_CONFIG_HOME` defaults to `~/.config`. The private filename is the repository identity percent-encoded as one filename: `example.com/team/repo` becomes `example.com%2Fteam%2Frepo.toml`. Local-path fallback identities are encoded too, so private files cannot escape the configuration directory.
 
-Higher layers replace scalar settings and lists; settings tables merge recursively. For example, private `base_ref = "origin/develop"` replaces repository `base_ref = "origin/main"`. Missing layers are ignored. Invalid TOML and invalid entries exit `2` with the source file named, including with `--json`.
+Higher layers replace scalar settings and lists; settings tables merge recursively. For example, private `merge_base_with = "origin/develop"` replaces repository `merge_base_with = "origin/main"`. Missing layers are ignored. Invalid TOML and invalid entries exit `2` with the source file named, including with `--json`.
 
 Entries use TOML arrays of tables:
 
 ```toml
-base_ref = "origin/main"
+merge_base_with = "origin/main"
 
 [[entries]]
 id = "test-factory"
@@ -196,12 +196,25 @@ ID again replaces its current verdict and preserves the previous answer in run
 history.
 
 Run state is JSON in `$XDG_STATE_HOME/dresscode/runs/` (default:
-`~/.local/state/dresscode/runs/`). Each repository and branch has a separate run;
+`~/.local/state/dresscode/runs/`). Each repository, branch and resolved baseline commit has a separate run;
 detached checkouts use `detached-<short-sha>`. Every answer records the current
 diff fingerprint and timestamp. A scoped change makes the verdict stale and
 requires a new answer before `dresscode check` can pass. Excluded changes do
 not stale it. `dresscode reset` clears current verdicts and waivers for this run
 without changing counters; past re-answers remain in history.
+
+Every successful review command includes top-level `run_key` and `base_commit`
+in JSON and identifies the baseline in text. The run key uses a versioned
+namespace; a changed default baseline starts a separate review even when its
+content fingerprint matches. Equivalent default targets share a run when their
+merge bases match. Context subprocesses receive the pinned baseline through
+`DRESSCODE_BASE_COMMIT`; nested review commands use it before default selection.
+
+Legacy runs lack baseline identity. Their files stay untouched, but cannot
+supply answers, context or waivers to new runs. Review again after upgrading;
+counters, retirements and context trust are retained. **After downgrading, run
+the legacy `dresscode reset` in every repository/branch before relying on its
+gate, then review again.** Older binaries can otherwise reuse retained approvals.
 
 The project `AGENTS.md` requires a fresh-context reviewer that did not see the
 implementation transcript. DressCode records the verdict but does not verify
@@ -288,15 +301,53 @@ dresscode diff --numstat
 dresscode diff --json
 ```
 
-The scope is the merge base of `HEAD` and the resolved base compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
+By default, the scope is the merge base of `HEAD` and the resolved target compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
 
 Base resolution uses the first available candidate:
 
 ```text
-configured base_ref → origin/HEAD → local main → local master → root commit
+configured merge_base_with → origin/HEAD → local main → local master → root commit
 ```
 
-An explicit `base_ref` must resolve to a commit; an invalid value exits `2` rather than silently choosing another base. A repository with no commits also exits `2`. The output reports both the selected ref (a commit ID for the root fallback) and the actual merge-base commit ID.
+A configured `merge_base_with` must resolve to a commit; an invalid value exits `2` rather than silently choosing another base. A repository with no commits also exits `2`. The output identifies the resolved merge-base commit as `base_commit`.
+
+### Review an exact commit
+
+`diff REF` is shorthand for `diff --base REF`. All seven review commands accept
+`--base REF`: `diff`, `list`, `answer`, `waive`, `check`, `report` and `reset`.
+An explicit ref selects its exact commit, including diverged or unrelated
+history; it does not calculate a merge base or resolve the unused default target.
+Branches, remote-tracking refs, lightweight/annotated tags, commit IDs and
+single-commit expressions such as `HEAD~2` work. Git refname precedence applies;
+use `refs/heads/name` or `refs/tags/name` to disambiguate collisions. Empty or
+invalid refs, ambiguous abbreviated IDs, ranges and blob/tree IDs exit `2`.
+Supplying both positional REF and `--base` also exits `2`. Revision errors under
+`--json` emit one error document on stdout and leave stderr empty.
+
+Pin a SHA across commands so a moving branch or tag cannot change the review:
+
+```sh
+dresscode diff HEAD~2 --numstat
+BASE=$(git rev-parse HEAD~2)
+dresscode list --base "$BASE" --json
+dresscode answer test-factory --base "$BASE" --yes --evidence "Reused the shared fixture."
+dresscode check --base "$BASE" --strict
+dresscode report --base "$BASE"
+dresscode reset --base "$BASE"
+```
+
+To accept a current violation, record the reviewer's violating verdict first,
+then use `dresscode waive test-factory --base "$BASE" --reason "<reason>"`.
+The ordinary gate accepts that waiver; `check --strict --base "$BASE"` rejects it.
+Gate repair commands pin the resolved SHA too.
+
+Selection priority is explicit REF, inherited `DRESSCODE_BASE_COMMIT`, then the
+default merge base. Context subprocesses inherit the parent's already resolved
+SHA; an explicit child ref can supply auxiliary evidence without changing the
+parent scope. Inspection never changes the selector for later invocations.
+Equivalent selectors share a run only when their baseline SHAs match. Different
+baselines keep separate answers, history, context and waivers even if content
+fingerprints match. Reset clears only the selected run; counters remain shared.
 
 ### Exclusions
 
@@ -327,7 +378,7 @@ Text output lists added lines, removed lines and each path, followed by totals. 
 
 Binary files use `-` for both counts and do not contribute to line totals. Paths containing tabs, newlines, quotes or backslashes are JSON-quoted so each file stays on one output line. Renames are shown as a deletion plus an addition, so moving unchanged content into scope still counts its added lines. Counts never subtract deletions from additions, and DressCode has no built-in size threshold.
 
-`--json` emits one document with `base_ref`, `merge_base`, `fingerprint`, `files` (`path`, `added`, `removed`) and `totals` (`added`, `removed`). Binary file counts are `null`. JSON takes precedence if combined with `--numstat`; successful output has no stderr text. An empty diff succeeds with an empty file list and zero totals.
+`--json` emits one document with `run_key`, `base_commit`, `fingerprint`, `files` (`path`, `added`, `removed`) and `totals` (`added`, `removed`). Binary file counts are `null`. JSON takes precedence if combined with `--numstat`; successful output has no stderr text. An empty diff succeeds with an empty file list and zero totals.
 
 The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and current content (symlinks use the link text, not the target). It stays stable across repeated reads and excluded edits. Staging or committing unchanged scoped content also preserves it when the merge base is unchanged. Removing a path from the index alone does not change the result, including when `core.filemode=false` ignores filesystem executable-bit changes. If re-adding the file records a different Git executable mode, that is a scoped change and the fingerprint changes. A scoped content edit changes it even if the line counts stay the same. This is the value used to bind review answers to the reviewed changes.
 

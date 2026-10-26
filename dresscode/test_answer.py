@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from dresscode.cli import app
 from dresscode.config import load
-from dresscode.diff import collect
+from dresscode.diff import collect, resolve_scope
 from dresscode.entries import Entry
 from dresscode.repo import discover
 from dresscode.run import RunStore
@@ -61,8 +61,9 @@ def test_answer_records_evidence_fingerprint_and_reveal_after_persisting(
 
     assert result.exit_code == 0, result.output
     response = json.loads(result.stdout)
-    record = RunStore(repository).read()["verdicts"]["factory"]
+    record = RunStore(resolve_scope(load(repository))).read()["verdicts"]["factory"]
     assert response == {
+        **resolve_scope(config).metadata(),
         "status": "recorded",
         "id": "factory",
         "verdict": "yes",
@@ -101,7 +102,7 @@ def test_answer_replaces_current_verdict_and_keeps_history_and_counters(
             assert json.loads(result.stdout)["matched"] is True
 
     repository = discover(git_repo)
-    state = RunStore(repository).read()
+    state = RunStore(resolve_scope(load(repository))).read()
     assert state["verdicts"]["factory"]["verdict"] == "n-a"
     assert [item["verdict"] for item in state["history"]] == ["yes", "no"]
     counters = EntryStore(repository).counters("factory")
@@ -129,7 +130,7 @@ def test_invalid_answers_exit_two_without_recording(
     assert result.exit_code == 2
     assert result.stderr == ""
     assert json.loads(result.stdout)["status"] == "error"
-    assert RunStore(discover(git_repo)).read()["verdicts"] == {}
+    assert RunStore(resolve_scope(load(discover(git_repo)))).read()["verdicts"] == {}
     assert EntryStore(discover(git_repo)).counters("factory") == Counters()
 
 
@@ -140,7 +141,7 @@ def test_counter_failure_rolls_back_the_saved_verdict(
     first = answer("factory", "--yes", "--evidence", "Reviewed", "--json")
     assert first.exit_code == 0, first.output
     repository = discover(git_repo)
-    run = RunStore(repository)
+    run = RunStore(resolve_scope(load(repository)))
     before = run.read()
     counters = EntryStore(repository).counters("factory")
 
@@ -160,7 +161,7 @@ def test_staleness_uses_scoped_diff_fingerprint(git_repo: Path) -> None:
     configure(git_repo)
     result = answer("factory", "--yes", "--evidence", "Reviewed", "--json")
     assert result.exit_code == 0, result.output
-    run = RunStore(discover(git_repo))
+    run = RunStore(resolve_scope(load(discover(git_repo))))
     config = load(discover(git_repo))
     fingerprint = collect(config).fingerprint
     assert run.stale_verdicts(fingerprint) == ()
@@ -181,7 +182,7 @@ def test_reset_clears_current_answers_and_waivers_but_preserves_counters(
     result = answer("factory", "--yes", "--evidence", "Reviewed", "--json")
     assert result.exit_code == 0, result.output
     repository = discover(git_repo)
-    run = RunStore(repository)
+    run = RunStore(resolve_scope(load(repository)))
     state: dict[str, Any] = json.loads(run.path.read_text())
     history_before = state["history"]
     state["waivers"]["factory"] = {
@@ -195,7 +196,7 @@ def test_reset_clears_current_answers_and_waivers_but_preserves_counters(
 
     assert reset.exit_code == 0, reset.output
     assert json.loads(reset.stdout)["status"] == "reset"
-    cleared = RunStore(repository).read()
+    cleared = RunStore(resolve_scope(load(repository))).read()
     assert cleared["verdicts"] == {}
     assert cleared["waivers"] == {}
     assert cleared["history"] == history_before
