@@ -6,9 +6,9 @@ Each ordered group ships working implementation, tests, compatibility and docs t
 
 Only default selection is public in this group; arbitrary-ref CLI overrides arrive in group 2.
 
-- [ ] 1.1 Add failing real-Git tests for default resolution, config alias/layer precedence, baseline-keyed identity, equivalent baselines, moving baselines and untouched legacy runs. Verify failure before implementation.
+- [ ] 1.1 Add failing real-Git tests for default resolution, config rename, old-key rejection in every layer and layer precedence, baseline-keyed identity, equivalent baselines, moving baselines and untouched legacy runs. Verify failure before implementation.
 - [ ] 1.2 Introduce shared resolved scope throughout default review consumers, versioned run keys and additive output metadata. Pin context subprocesses via `DRESSCODE_BASE_COMMIT`. Verify existing workflows, detached HEAD, fingerprints, evidence/waiver/reset isolation, sealed questions and legacy-state safety.
-- [ ] 1.3 Document `merge_base_with`, the deprecated alias, scope metadata, fresh reviews and mandatory legacy reset after downgrade in README and packaged skill. Verify examples and default CLI help against tests; do not advertise unimplemented overrides.
+- [ ] 1.3 Document `merge_base_with`, the breaking config rename, scope metadata, fresh reviews and mandatory legacy reset after downgrade in README and packaged skill. Verify examples and default CLI help against tests; do not advertise unimplemented overrides.
 - [ ] 1.4 Run the checks below and complete this group's commit/review boundary; verify all existing default consumers remain working before group 2.
 
 ## 2. Commit: Review exact refs across the full CLI workflow

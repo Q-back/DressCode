@@ -59,16 +59,20 @@ The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--num
 
 ## ADDED Requirements
 
-### Requirement: Default target configuration compatibility
+### Requirement: Default target configuration
 
-`merge_base_with` SHALL name the ref used to compute the default merge base. Legacy `base_ref` SHALL remain a deprecated alias, normalized before each configuration document is merged, preserving layer precedence. A document declaring both keys SHALL fail with exit `2`. Configuration SHALL NOT be rewritten automatically.
+`merge_base_with` SHALL name the ref used to compute the default merge base, preserving normal configuration-layer precedence and configuration errors. The old `base_ref` config key SHALL NOT be accepted as an alias. Any configuration document containing it SHALL fail with exit `2` and an error naming `merge_base_with` as its replacement, even if a higher layer overrides the target or the same document also declares `merge_base_with`. Configuration SHALL NOT be rewritten automatically.
 
-#### Scenario: Existing configuration still works
-- **WHEN** a layer uses only `base_ref = "main"`
-- **THEN** default selection behaves as `merge_base_with = "main"`
+#### Scenario: Old config key is rejected
+- **WHEN** a configuration document contains `base_ref`, alone or alongside `merge_base_with`
+- **THEN** configuration loading exits `2` with an error directing the user to `merge_base_with`
 
-#### Scenario: Layer precedence crosses aliases
-- **WHEN** a higher layer uses either spelling over a lower layer using the other
+#### Scenario: Higher layers do not hide the old key
+- **WHEN** a lower layer contains `base_ref` and a higher layer declares `merge_base_with`
+- **THEN** configuration loading still exits `2` with an error naming the replacement
+
+#### Scenario: Layer precedence
+- **WHEN** a higher and lower layer both declare `merge_base_with`
 - **THEN** the higher layer's target wins
 
 ### Requirement: Explicit revision validation
