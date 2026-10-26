@@ -11,7 +11,7 @@ Reviewing an arbitrary revision needs more than a different diff: questions, evi
 - Carry that baseline through context evidence, answers, waivers, checks, reports and resets. Show it in output; inspection never changes later defaults.
 - Keep existing scoped-content, exclusion, fingerprint and submodule rules.
 - **BREAKING:** use only `merge_base_with` for the default target throughout config, code, tests and docs. Drop the previous name, including its diff JSON field, without aliases, migration logic or special handling for old configs.
-- **BREAKING:** legacy runs lack baseline identity and cannot safely supply approvals to new runs. Preserve their files, but require fresh answers; counters and trust remain intact. Review JSON gains scope metadata.
+- **BREAKING:** legacy runs lack baseline identity and cannot safely supply approvals to new runs. Preserve their files, but require fresh answers; counters and trust remain intact. Review JSON gains scope metadata; diff JSON uses `base_commit` as its only baseline field and drops `merge_base`.
 
 ## Capabilities
 

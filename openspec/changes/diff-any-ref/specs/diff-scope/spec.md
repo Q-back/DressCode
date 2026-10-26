@@ -42,7 +42,7 @@ The current diff SHALL compare the selected baseline commit directly with the wo
 
 ### Requirement: Diff command
 
-The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--numstat`, `--json` and context-command support. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. Output SHALL identify the actual baseline. Numstat descriptions SHALL remain on stderr; JSON SHALL take precedence and leave stderr empty. Diff JSON SHALL contain `run_key`, `base_commit`, `merge_base`, files, totals and fingerprint.
+The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--numstat`, `--json` and context-command support. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. Output SHALL identify the actual baseline. Numstat descriptions SHALL remain on stderr; JSON SHALL take precedence and leave stderr empty. Diff JSON SHALL contain `run_key`, `base_commit`, files, totals and fingerprint. `base_commit` SHALL be the only baseline field and identify the resolved comparison commit for both default and exact selection. Diff JSON SHALL NOT contain `merge_base`.
 
 #### Scenario: Numstat form
 - **WHEN** `dresscode diff --numstat` runs
@@ -52,10 +52,15 @@ The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--num
 - **WHEN** an entry uses `context = "dresscode diff --numstat"`
 - **THEN** its output is delivered alongside the question for the selected scope
 
-#### Scenario: Baseline metadata
-- **WHEN** a diff succeeds with `--json`
-- **THEN** it includes `run_key`, resolved `base_commit`, files, totals and fingerprint
-- **AND** legacy `merge_base` identifies default merge-base selection or is `null` for an exact override; it is not part of run identity
+#### Scenario: Default baseline metadata
+- **WHEN** a diff succeeds with `--json` and no explicit or inherited override
+- **THEN** it includes `run_key`, files, totals, fingerprint and `base_commit` set to the calculated merge-base SHA
+- **AND** it omits `merge_base`
+
+#### Scenario: Exact baseline metadata
+- **WHEN** a diff succeeds with `--json` and an explicit or inherited override
+- **THEN** `base_commit` is the resolved SHA of that exact baseline
+- **AND** it omits `merge_base` rather than emitting it as `null`
 
 ## ADDED Requirements
 
