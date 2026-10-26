@@ -42,7 +42,7 @@ The current diff SHALL compare the selected baseline commit directly with the wo
 
 ### Requirement: Diff command
 
-The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--numstat`, `--json` and context-command support. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. Output SHALL identify the actual baseline. Numstat descriptions SHALL remain on stderr; JSON SHALL take precedence and leave stderr empty. Existing JSON fields SHALL remain, with additive scope metadata.
+The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--numstat`, `--json` and context-command support. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. Output SHALL identify the actual baseline. Numstat descriptions SHALL remain on stderr; JSON SHALL take precedence and leave stderr empty. Diff JSON SHALL contain `run_key`, `base_commit`, `merge_base`, files, totals and fingerprint.
 
 #### Scenario: Numstat form
 - **WHEN** `dresscode diff --numstat` runs
@@ -54,22 +54,14 @@ The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--num
 
 #### Scenario: Baseline metadata
 - **WHEN** a diff succeeds with `--json`
-- **THEN** it includes `run_key`, resolved `base_commit`, selected `base_ref`, files, totals and fingerprint
+- **THEN** it includes `run_key`, resolved `base_commit`, files, totals and fingerprint
 - **AND** legacy `merge_base` identifies default merge-base selection or is `null` for an exact override; it is not part of run identity
 
 ## ADDED Requirements
 
 ### Requirement: Default target configuration
 
-`merge_base_with` SHALL name the ref used to compute the default merge base, preserving normal configuration-layer precedence and configuration errors. The old `base_ref` config key SHALL NOT be accepted as an alias. Any configuration document containing it SHALL fail with exit `2` and an error naming `merge_base_with` as its replacement, even if a higher layer overrides the target or the same document also declares `merge_base_with`. Configuration SHALL NOT be rewritten automatically.
-
-#### Scenario: Old config key is rejected
-- **WHEN** a configuration document contains `base_ref`, alone or alongside `merge_base_with`
-- **THEN** configuration loading exits `2` with an error directing the user to `merge_base_with`
-
-#### Scenario: Higher layers do not hide the old key
-- **WHEN** a lower layer contains `base_ref` and a higher layer declares `merge_base_with`
-- **THEN** configuration loading still exits `2` with an error naming the replacement
+`merge_base_with` SHALL be the only config name for the ref used to compute the default merge base, preserving normal configuration-layer precedence and configuration errors. The previous name SHALL be removed from code, tests, docs and diff JSON, without aliases, migration logic or special errors for old configs. Configuration SHALL NOT be rewritten automatically.
 
 #### Scenario: Layer precedence
 - **WHEN** a higher and lower layer both declare `merge_base_with`

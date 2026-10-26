@@ -10,7 +10,7 @@ Reviewing an arbitrary revision needs more than a different diff: questions, evi
 - Key runs by repository, branch and resolved baseline commit. Ref aliases and default/explicit selection share a run when they resolve to the same baseline; no comparison-mode identity.
 - Carry that baseline through context evidence, answers, waivers, checks, reports and resets. Show it in output; inspection never changes later defaults.
 - Keep existing scoped-content, exclusion, fingerprint and submodule rules.
-- **BREAKING:** rename the config setting `base_ref` to `merge_base_with` without an alias. Reject the old key with an error naming its replacement.
+- **BREAKING:** use only `merge_base_with` for the default target throughout config, code, tests and docs. Drop the previous name, including its diff JSON field, without aliases, migration logic or special handling for old configs.
 - **BREAKING:** legacy runs lack baseline identity and cannot safely supply approvals to new runs. Preserve their files, but require fresh answers; counters and trust remain intact. Review JSON gains scope metadata.
 
 ## Capabilities

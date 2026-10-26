@@ -52,7 +52,7 @@ The system SHALL key each run by repository identity, branch name and full resol
 
 ### Requirement: Visible and reproducible scope
 
-Successful review commands SHALL identify the baseline in text and include top-level `base_commit` and `run_key` in JSON, retaining existing fields and sealed-question behavior. Gate repair commands SHALL explicitly pin the selected baseline SHA so following them cannot accidentally act on another scope.
+Successful review commands SHALL identify the baseline in text and include top-level `base_commit` and `run_key` in JSON, using the diff JSON fields defined in the diff-scope spec and retaining other review payload fields and sealed-question behavior. Gate repair commands SHALL explicitly pin the selected baseline SHA so following them cannot accidentally act on another scope.
 
 #### Scenario: Recovering a blocked scoped review
 - **WHEN** `check --base HEAD~2` reports an unanswered question
