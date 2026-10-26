@@ -12,6 +12,6 @@ successfully before hand-over. The gate covers the final cumulative diff;
 intermediate commits do not need current verdicts. A passing gate records answers
 but does not prove reviewer independence.
 
-When only reviewing code, record answers and report findings. Do not require
-fixes, waivers or a passing `dresscode check` just to finish the review. Surface
-unanswered questions, stale answers, context failures and command errors.
+When only reviewing code, record answers and report findings. Do not change
+reviewed code, add waivers or run `dresscode check`. Surface unanswered questions,
+stale answers, context failures and command errors.

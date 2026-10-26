@@ -32,6 +32,9 @@ uv run dresscode --help
 `dresscode --skill` prints a short, standalone `SKILL.md` to stdout and exits
 successfully, even outside a Git repository. It covers setup, the review workflow,
 and authoring useful rules. It reads no project configuration and changes nothing.
+The skill's review flow records verdicts and reports findings; it does not edit
+reviewed code or grant waivers. The calling workflow handles fixes and accepted
+exceptions.
 
 Give the output to an agent directly, or save it as `SKILL.md` in a skill directory
 supported by your agent harness. Installation and activation are up to you:
@@ -49,13 +52,13 @@ questions using `dresscode add` or the TOML layers below; no questions are seede
 list → fresh-context reviewer → answer → report
 ```
 
-- **Changing code?** Run tests first. Fix the problems or record explicitly
-  accepted exceptions, obtain new verdicts after edits, and require
-  `dresscode check` to pass before you're done.
+- **Changing code?** Run tests first. The review reports findings; the calling
+  workflow handles fixes and explicitly accepted exceptions. Obtain new verdicts
+  after edits and require `dresscode check` to pass before you're done.
 - **Only reviewing code?** Answer every question with evidence and report the
-  problems. Do not fix code or add waivers just to finish the review; a passing
-  `check` is not required. Surface unanswered questions, stale answers, context
-  failures and command errors rather than treating them as completed checks.
+  problems. Do not change reviewed code, add waivers or run `dresscode check`.
+  Surface unanswered questions, stale answers, context failures and command
+  errors rather than treating them as completed checks.
 
 Every command supports `--help` (exit `0`) and `--json`. JSON output is a single document on stdout; configuration, state and environment errors use `{"status": "error", "error": "..."}` and exit `2`.
 
@@ -261,16 +264,17 @@ not seen the implementation transcript. Give it the final cumulative diff
 (including uncommitted work) and the questions from dresscode list --json,
 not the sealed expectations or reveals. Record every answer with evidence
 using dresscode answer; use n-a with evidence when a question does not apply.
-Resolve violations or record an explicitly accepted waiver with a reason.
+The main task, not the review skill, resolves violations or records explicitly
+accepted waivers with reasons.
 Require dresscode check to exit 0 before hand-over, and show dresscode report.
 If the reviewed diff changes, obtain current answers before checking again.
 Intermediate commits do not need current DressCode verdicts.
 A passing check records answers; it does not prove reviewer independence.
 
 When only reviewing code, record every answer with evidence and report problems.
-Do not fix code or add waivers just to finish the review, and do not require
-dresscode check to pass. Surface unanswered questions, stale answers, context
-failures and command errors instead of treating them as completed checks.
+Do not change reviewed code, add waivers or run dresscode check. Surface
+unanswered questions, stale answers, context failures and command errors instead
+of treating them as completed checks.
 ```
 
 Use `dresscode check --strict` instead when the project must reject waivers.
@@ -375,9 +379,10 @@ DressCode is a pure CLI over a state store plus git. It never spawns agents, nev
 
 For code changes, `AGENTS.md` or the harness instructions require a fresh-context
 review and a passing `dresscode check` before the agent declares the changes done.
-When only reviewing code, report findings without requiring fixes, waivers or a
-passing gate. Intermediate commits do not need to pass DressCode: the gate covers
-the final cumulative diff, including uncommitted work, not individual commits.
+When only reviewing code, report findings without changing reviewed code, adding
+waivers or running `dresscode check`. Intermediate commits do not need to pass
+DressCode: the gate covers the final cumulative diff, including uncommitted work,
+not individual commits.
 DressCode does not install or require Git hooks. V0 gates recorded answers against
 the current diff; passing is not proof of independent review.
 `dresscode check --strict` additionally rejects waivers.

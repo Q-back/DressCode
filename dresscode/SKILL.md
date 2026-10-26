@@ -21,8 +21,8 @@ seeded; add rules as below. Use `dresscode <command> --help` for flags.
 
 ## Review
 
-Use this flow when changing code or only reviewing it. If changing code, run
-tests first.
+Review code, record answers and report findings. Do not change the reviewed code
+or add waivers. The calling workflow handles fixes and accepted exceptions.
 
 1. Inspect `dresscode diff --json` for the review base and scope.
    This reports paths and counts, not a code patch. Review the full cumulative
@@ -41,19 +41,15 @@ tests first.
    errors; do not treat them as completed checks. The report command can succeed
    with status `failed`; that does not mean the code passes.
 
-- **Changing code?** Resolve violations and obtain new verdicts after scoped
-  edits. For an explicitly accepted exception, use
-  `dresscode waive <id> --reason "<reason>"`; it requires a current violating
-  answer. Require `dresscode check` to exit 0 before hand-over and show the final
-  report. Exit 1 needs review action; exit 2 means a usage, configuration, state
-  or environment error. `check --strict` also rejects waivers. Intermediate
-  commits do not need current answers. An empty rule list passes but reviews
-  nothing.
-- **Only reviewing code?** Report the problems and stop. Do not fix the reviewed
-  code or add waivers just to finish the review. `dresscode check` need not pass:
-  a completed review can contain violations.
+- **Changing code?** Run `dresscode check` and include its result in the report.
+  If it fails, report the blockers to the caller; do not fix code or add waivers.
+  Exit 1 means the gate failed; exit 2 means a usage, configuration, state or
+  environment error. `check --strict` also rejects waivers.
+- **Only reviewing code?** Do not run `dresscode check`. Report the findings and
+  stop, even if violations remain.
 
-Answers and waivers become stale when the reviewed diff changes.
+Answers and waivers become stale when the reviewed diff changes. An empty rule
+list passes the gate but reviews nothing.
 
 Context commands run during `list`. Inspect repository-local commands before
 `dresscode trust`; they run with your permissions, not in a read-only sandbox.
