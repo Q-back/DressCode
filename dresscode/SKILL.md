@@ -42,7 +42,7 @@ or add waivers. The calling workflow handles fixes and accepted exceptions.
    with status `failed`; that does not mean the code passes.
 
 - **Changing code?** Run `dresscode check` and include its result in the report.
-  If it fails, report the blockers to the caller; do not fix code or add waivers.
+  If it fails, report the blockers to the caller.
   Exit 1 means the gate failed; exit 2 means a usage, configuration, state or
   environment error. `check --strict` also rejects waivers.
 - **Only reviewing code?** Do not run `dresscode check`. Report the findings and
