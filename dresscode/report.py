@@ -4,6 +4,7 @@ import sys
 from typing import Any
 
 from rich.console import Console
+from rich.padding import Padding
 from rich.text import Text
 
 from dresscode.config import Configuration
@@ -58,8 +59,10 @@ def summarize(
 
 def render(summary: dict[str, Any]) -> None:
     console = Console(color_system="auto" if sys.stdout.isatty() else None)
-    style = "red" if summary["status"] == "failed" else "green"
-    console.print(summary["status"], style=style, markup=False)
+    color = {"failed": "red", "passed": "green", "passed-with-waivers": "yellow"}[
+        summary["status"]
+    ]
+    console.print(Text(summary["status"], style=f"bold {color}"))
     diff = summary["diff"]
     console.print(
         Text.from_ansi(
@@ -67,25 +70,68 @@ def render(summary: dict[str, Any]) -> None:
         )
     )
     for entry in summary["entries"]:
-        console.print(
-            Text.from_ansi(f"{entry['id']}: {entry['question']} [{entry['state']}]")
-        )
-        if entry.get("error"):
-            console.print(Text.from_ansi(f"  {entry['error']}"))
-        if "context_output" in entry:
-            console.print(Text.from_ansi(f"  Context: {entry['context_output']}"))
-        if entry["verdict"] is not None:
-            console.print(
-                Text.from_ansi(
-                    f"  Verdict: {entry['verdict']}\n  Evidence: {entry['evidence']}\n"
-                    f"  Reveal: {entry['reveal']}"
-                )
-            )
+        _render_entry(console, entry)
     if summary["waivers"]:
-        console.print("Waivers", style="yellow")
+        console.print()
+        console.print(Text("Waivers", style="bold yellow"))
         for waiver in summary["waivers"]:
+            console.print()
             console.print(
                 Text.from_ansi(
                     f"  {waiver['id']} [{waiver['state']}]: {waiver['reason']}"
                 )
             )
+
+
+def _render_entry(console: Console, entry: dict[str, Any]) -> None:
+    color = {
+        "passed": "green",
+        "violated": "red",
+        "context_failed": "red",
+        "stale": "yellow",
+        "unanswered": "yellow",
+        "waived": "yellow",
+        "context_untrusted": "yellow",
+    }[entry["state"]]
+    console.print()
+    console.print(Text("-" * console.width))
+    heading = Text(f"Rule: {Text.from_ansi(entry['id']).plain}", style="bold cyan")
+    heading.append(f" [{entry['state']}]", style=f"bold {color}")
+    console.print(heading)
+    _render_field(console, "Question", entry["question"], style="dim")
+    verdict = entry["verdict"] or "unanswered"
+    verdict_color = color
+    if (
+        entry["state"] == "stale"
+        and verdict in ("yes", "no")
+        and verdict == entry["expected"]
+    ):
+        verdict_color = "green"
+    if verdict in ("yes", "no") and verdict != entry["expected"]:
+        verdict += f" (expected {entry['expected']})"
+    _render_field(console, "Verdict", verdict, style=f"bold {verdict_color}")
+    if entry["verdict"] is not None:
+        _render_field(console, "Evidence", entry["evidence"], stacked=True)
+    if "context_output" in entry:
+        _render_field(console, "Context", entry["context_output"], stacked=True)
+    if entry.get("error"):
+        _render_field(
+            console, "Context error", entry["error"], style="red", stacked=True
+        )
+    if entry["verdict"] is not None:
+        _render_field(console, "Reveal", entry["reveal"], style="dim")
+
+
+def _render_field(
+    console: Console, label: str, value: str, *, style: str = "", stacked: bool = False
+) -> None:
+    console.print()
+    field = Text(style=style)
+    field.append(f"{label}:", style="bold")
+    content = Text.from_ansi(value).plain
+    if stacked:
+        console.print(field)
+        console.print(Padding(Text(content, style=style), (0, 0, 0, 2)))
+    else:
+        field.append(f" {content}", style=style)
+        console.print(field)

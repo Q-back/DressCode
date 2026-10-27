@@ -31,6 +31,65 @@ def document(root: Path, *arguments: str, code: int = 0) -> dict[str, Any]:
     return json.loads(cli(root, *arguments, "--json", code=code).stdout)
 
 
+def test_report_groups_multiple_rules_and_preserves_json(workflow_repo: Path):
+    root = workflow_repo
+    cli(root, "trust")
+    (root / "change.txt").write_text("A small catalog change.\n")
+    listed = document(root, "list")["entries"]
+    evidence = (
+        "demo/fruit_catalog.py:12 keeps [Pear] before [Apple]. "
+        "Reviewed every catalog entry and its ordering.\n"
+        "The [demo] catalog contains no other changes."
+    )
+    verdicts = {"size": "no", "side-effects": "no", "python": "n-a"}
+    for identifier, verdict in verdicts.items():
+        document(root, "answer", identifier, f"--{verdict}", "--evidence", evidence)
+    reason = "Accepted [demo] catalog size."
+    cli(root, "waive", "size", "--reason", reason)
+
+    for stale in (False, True):
+        if stale:
+            (root / "change.txt").write_text("Changed after the review.\n")
+        summary = document(root, "report")
+        rendered = cli(root, "report").stdout
+        assert "\x1b[" not in rendered
+        assert summary == document(root, "report")
+        assert summary["status"] == ("failed" if stale else "passed-with-waivers")
+        compact = "".join(rendered.split())
+        assert summary["diff"]["base_commit"] in compact
+        assert "Expected:" not in rendered
+        blocks = rendered.split("Rule: ")[1:]
+        assert len(blocks) == 3
+        for block, entry, question in zip(
+            blocks, summary["entries"], listed, strict=True
+        ):
+            identifier = entry["id"]
+            state = (
+                "stale" if stale else ("waived" if identifier == "size" else "passed")
+            )
+            assert block.startswith(f"{identifier} [{state}]")
+            assert entry["state"] == state
+            normalized = " ".join(block.split())
+            assert f"Question: {question['question']}" in normalized
+            assert f"Reveal: {entry['reveal']}" in normalized
+            assert "\n\nEvidence:\n" in block
+            assert "".join(evidence.split()) in "".join(block.split())
+            expected = "no" if identifier == "side-effects" else "yes"
+            assert entry["expected"] == expected
+            assert entry["evidence"] == evidence
+            assert entry["verdict"] == verdicts[identifier]
+            annotation = " (expected yes)" if identifier == "size" else ""
+            assert f"Verdict: {verdicts[identifier]}{annotation}\n" in block
+            if identifier == "size":
+                assert entry["context_output"] == question["context_output"]
+                assert "Context:" in block
+                assert "change.txt" in block
+        assert "\n\nWaivers\n" in rendered
+        waiver = summary["waivers"][0]
+        assert waiver["state"] == ("stale" if stale else "current")
+        assert f"size [{waiver['state']}]: {reason}" in rendered.split("Waivers\n")[1]
+
+
 def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Path):
     root = workflow_repo
     cli(root, "trust")

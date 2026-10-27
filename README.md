@@ -245,9 +245,17 @@ expires the waiver; re-answering removes it, and reset clears all current waiver
 `check --strict` performs the same checks and additionally fails on waivers,
 listing them instead of accepting a documented violation.
 
-`report` shows overall status, added/removed lines, questions, verdicts, evidence
-and reveals for answered entries, with waivers and their reasons in a separate
-section. Stale waivers are labeled. Redirected output has no ANSI colors.
+`report` shows overall status and added/removed lines, followed by separate rule
+blocks. Each block starts with a separator and a `Rule: <id> [state]` heading.
+Bold, colored headings and verdicts lead to a prominent Evidence label and
+indented evidence. Question and Reveal stay visible with muted styling.
+Matching answers and `n-a` keep a compact verdict; conflicting yes/no answers
+add the expectation inline, such as `Verdict: no (expected yes)`.
+A matching yes/no verdict stays green when stale; its `[stale]` state stays yellow.
+Unanswered rules show `Verdict: unanswered` without sealed fields. Recorded
+context and context errors stay in their rule's block. Waivers and their reasons
+have a separate section, with stale waivers labeled. Separators, labels and
+spacing preserve the grouping in redirected output, which has no ANSI colors.
 `report --json` includes `status`, `run_key`, `diff`, `entries` and `waivers`.
 Reporting a blocked run succeeds; a report with status `failed` can contain
 review findings, unanswered questions or other blockers. A successful report
