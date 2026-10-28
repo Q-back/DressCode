@@ -56,6 +56,7 @@ def supported_repository_url(url: str) -> bool:
         )
         or "?" in url
         or "#" in url
+        or "\\" in url
     ):
         return False
     try:
