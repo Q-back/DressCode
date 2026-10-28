@@ -390,7 +390,9 @@ or entry points.
 
 Tests live alongside the package modules. Each test gets temporary XDG config and state directories; Git tests use a real temporary repository, not the checkout. End-to-end tests invoke the CLI in separate processes and exercise reviews with and without waivers.
 
-The optional development hooks run Ruff formatting, Ruff linting and `ty` only:
+The optional development hooks run Ruff formatting, Ruff linting and `ty` only.
+They use `uv run --locked` to create or sync each worktree's `.venv` from
+`uv.lock` automatically, without changing the lockfile. Keep `uv` on your PATH:
 
 ```sh
 uv run pre-commit install
