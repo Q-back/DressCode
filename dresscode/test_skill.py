@@ -211,6 +211,7 @@ def test_skill_pin_ignores_unrelated_caller_head(
         "https://example.invalid/team/repo`.git",
         "https://example.invalid\\bad/repo.git",
         "https://bad|host/repo.git",
+        "https://[fe80::1%25bad|host]/repo.git",
         "https://[invalid]/team/repo.git",
     ],
 )
