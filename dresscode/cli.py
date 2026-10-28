@@ -1,5 +1,6 @@
 """Command-line interface for DressCode."""
 
+import ipaddress
 import json
 import re
 import shlex
@@ -46,6 +47,19 @@ _OFFICIAL_INSTALL_COMMAND = (
     "uv tool install 'git+https://github.com/Q-back/DressCode.git'"
 )
 _FULL_GIT_COMMIT = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
+_URI_REG_NAME = re.compile(r"(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9a-fA-F]{2})+\Z")
+
+
+def supported_repository_host(hostname: str) -> bool:
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            ascii_hostname = hostname.encode("idna").decode("ascii")
+        except UnicodeError:
+            return False
+        return _URI_REG_NAME.fullmatch(ascii_hostname) is not None
+    return True
 
 
 def supported_repository_url(url: str) -> bool:
@@ -67,6 +81,7 @@ def supported_repository_url(url: str) -> bool:
     return (
         parsed.scheme == "https"
         and parsed.hostname is not None
+        and supported_repository_host(parsed.hostname)
         and parsed.username is None
         and parsed.password is None
         and (port is None or 0 <= port <= 65535)
