@@ -64,9 +64,12 @@ or correctness. An empty question list passes without reviewing anything.
 `dresscode --skill` prints a short, standalone `SKILL.md` to stdout and exits
 successfully, even outside a Git repository. It covers setup, the review workflow,
 and authoring useful rules. It reads no project configuration and changes nothing.
-The skill's review flow records verdicts and reports findings; it does not edit
-reviewed code or grant waivers. The calling workflow handles fixes and accepted
-exceptions.
+When installed-package metadata has a supported HTTPS Git source and resolved
+commit, the export pins that source. Otherwise it uses the official unpinned Git
+command, which may not match the installed version. It never infers a pin from
+the caller's checkout. The skill's review flow records verdicts and reports
+findings; it does not edit reviewed code or grant waivers. The calling workflow
+handles fixes and accepted exceptions.
 
 ## Repository identity
 

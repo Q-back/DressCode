@@ -70,6 +70,10 @@ answers; it does not launch the reviewer or verify its independence.
    See [agent integration](docs/manual.md#agent-integration) for the instruction
    to add to your target project.
 
+   When installed from supported Git metadata, the export pins the install URL and
+   resolved commit. Otherwise it uses the official unpinned command, which may
+   not match the installed version.
+
 3. In your **target Git repository**, ask your agent to add the first question,
    like the test-helper example above. Questions start empty; an empty gate passes
    without reviewing anything.
