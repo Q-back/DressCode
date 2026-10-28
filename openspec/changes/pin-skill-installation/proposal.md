@@ -2,12 +2,12 @@
 
 ## Why
 
-Generated skills should tell agents how to install the matching DressCode source without maintaining a SHA by hand.
+Generated skills should tell agents how to install DressCode if it is missing. Prefer the source version that produced the skill, including forks, without maintaining a SHA by hand.
 
 ## What Changes
 
-- Add a revision-pinned install command to `dresscode --skill` when installed-package metadata identifies an exact upstream Git revision.
-- Keep the existing checkout instructions when that revision is unavailable or cannot be trusted.
+- Add a revision-pinned install command to `dresscode --skill` using the repository URL and exact Git commit recorded in installed-package metadata.
+- Use `uv tool install 'git+https://github.com/Q-back/DressCode.git'` in the bundled skill and as the export fallback when usable source metadata is unavailable. This installs from the official repository's default branch, not a pinned version.
 - Preserve standalone, read-only skill output. Do not add Git discovery, packaging hooks, dependencies or configuration.
 
 ## Capabilities
