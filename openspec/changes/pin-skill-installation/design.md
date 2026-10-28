@@ -16,9 +16,16 @@ Keep this to a small renderer using the standard library. Do not infer checkout 
 - When a pin is available, replace only the bundled install sentence in memory. Keep the Markdown usable by itself, with no placeholders.
 - Both setup forms tell agents how to install DressCode if it is missing. Do not special-case editable installs or mention them in skill instructions; usable source metadata alone controls whether a pin is generated.
 
+## Validation
+
+Offline `uv tool install` checks with uv 0.10.8 confirmed `direct_url.json` for unpinned, branch, tag and full-commit installs from a temporary `git+file://` repository. Reading it through `importlib.metadata` returned the repository URL, `vcs_info.vcs` set to `git` and the full resolved `vcs_info.commit_id`. Branch and tag names appeared separately in `vcs_info.requested_revision`.
+
+The checks used isolated temporary tool, executable and cache directories, without network access or changes to the user's tools. Preserve these cases as an automated regression test before accepting the implementation.
+
+The file URL verifies uv's Git metadata format, not a supported export source. Exported pin rendering with realistic official-repository and fork HTTPS metadata remains unverified and needs separate CLI tests.
+
 ## Risks / Trade-offs
 
-- uv's Git-install metadata has not been verified in this checkout. Require an offline real-uv Git installation test before accepting the implementation; use a temporary repository, not the network or the user's tool installation. Test exported pin rendering with realistic official-repository and fork metadata separately.
 - A source commit does not lock dependencies. Describe the command as a source pin, not a fully reproducible environment.
 - The fallback follows the official repository's default branch and may not match the exported instructions exactly. Document it as an unpinned fallback, not a matching-source guarantee.
 - Unsupported URL forms intentionally fall back instead of adding URL normalization machinery.
