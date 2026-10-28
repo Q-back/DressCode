@@ -47,6 +47,7 @@ _OFFICIAL_INSTALL_COMMAND = (
     "uv tool install 'git+https://github.com/Q-back/DressCode.git'"
 )
 _FULL_GIT_COMMIT = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
+_INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9a-fA-F]{2})")
 _URI_REG_NAME = re.compile(r"(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9a-fA-F]{2})+\Z")
 
 
@@ -73,6 +74,7 @@ def supported_repository_url(url: str) -> bool:
         or "?" in url
         or "#" in url
         or "\\" in url
+        or _INVALID_PERCENT_ESCAPE.search(url) is not None
     ):
         return False
     try:

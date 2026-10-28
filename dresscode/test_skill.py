@@ -157,9 +157,10 @@ def test_skill_inside_git_ignores_invalid_local_config(
     [
         "https://github.com/Q-back/DressCode.git",
         "https://git.example.invalid/fork/DressCode.git",
+        "https://example.invalid/team/repo%20name.git",
     ],
 )
-def test_skill_pins_official_and_fork_sources(
+def test_skill_pins_supported_git_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, url: str
 ) -> None:
     monkeypatch.chdir(tmp_path)
@@ -209,6 +210,8 @@ def test_skill_pin_ignores_unrelated_caller_head(
         "https://example.invalid/team/repo name.git",
         "https://example.invalid/team/repo\n.git",
         "https://example.invalid/team/repo`.git",
+        "https://example.invalid/team/repo%ZZ.git",
+        "https://example.invalid/team/repo%.git",
         "https://example.invalid\\bad/repo.git",
         "https://bad|host/repo.git",
         "https://[fe80::1%25bad|host]/repo.git",
