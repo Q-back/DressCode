@@ -176,6 +176,23 @@ def test_skill_pins_supported_git_sources(
     assert "git+https://github.com/Q-back/DressCode.git'" not in result.stdout
 
 
+@pytest.mark.parametrize("subdirectory", ["tools/dresscode", "", None, 17])
+def test_skill_falls_back_for_package_subdirectory_metadata(
+    monkeypatch: pytest.MonkeyPatch, subdirectory: str | int | None
+) -> None:
+    metadata = json.loads(
+        direct_url_json("https://example.invalid/monorepo.git", "a" * 40)
+    )
+    metadata["subdirectory"] = subdirectory
+    set_direct_url(monkeypatch, json.dumps(metadata))
+
+    result = runner.invoke(app, ["--skill"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == skill_text()
+    assert result.stderr == ""
+
+
 def test_skill_pin_ignores_unrelated_caller_head(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

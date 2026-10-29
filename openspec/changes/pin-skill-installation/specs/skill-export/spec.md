@@ -8,7 +8,7 @@ Export standalone agent instructions with installation guidance that matches the
 
 ### Requirement: Matching installation pin
 
-`dresscode --skill` SHALL include a `uv tool install` command targeting `git+<repository-url>@<revision>` when installed-package metadata records a supported Git repository URL and a full resolved hexadecimal Git commit ID. It SHALL use that source URL, including forks, and that commit rather than the caller's repository or a moving branch or tag. Setup SHALL explain how to install DressCode if it is missing. No manual SHA update SHALL be required.
+`dresscode --skill` SHALL include a `uv tool install` command targeting `git+<repository-url>@<revision>` when installed-package metadata records a supported Git repository URL and a full resolved hexadecimal Git commit ID, without a `subdirectory` field. It SHALL use that source URL, including forks, and that commit rather than the caller's repository or a moving branch or tag. Setup SHALL explain how to install DressCode if it is missing. No manual SHA update SHALL be required.
 
 #### Scenario: Installed official Git revision
 - **WHEN** installed metadata records a supported official-repository Git URL and a full commit ID
@@ -37,6 +37,10 @@ Without both a supported Git URL and a full resolved commit ID, export SHALL use
 #### Scenario: No usable source metadata
 - **WHEN** metadata is missing, unreadable, malformed, non-Git, has an unsupported URL, or lacks a full commit ID
 - **THEN** export succeeds with the bundled Markdown and its official unpinned install command
+
+#### Scenario: Metadata declares a package subdirectory
+- **WHEN** installed metadata contains a `subdirectory` field, regardless of its value
+- **THEN** export uses the bundled Markdown unchanged rather than generating a pin that targets the repository root
 
 #### Scenario: Local install without Git source metadata
 - **WHEN** DressCode runs from a local installation without a supported Git URL and resolved commit in its metadata, whether the checkout is clean or dirty

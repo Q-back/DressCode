@@ -101,7 +101,7 @@ def installed_source_pin() -> str | None:
         direct_url = json.loads(raw_url)
     except PackageNotFoundError, OSError, ValueError:
         return None
-    if not isinstance(direct_url, dict):
+    if not isinstance(direct_url, dict) or "subdirectory" in direct_url:
         return None
     vcs_info = direct_url.get("vcs_info")
     if not isinstance(vcs_info, dict) or vcs_info.get("vcs") != "git":
