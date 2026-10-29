@@ -83,10 +83,16 @@ def supported_repository_url(url: str) -> bool:
     except ValueError:
         return False
     return (
-        parsed.scheme == "https"
+        parsed.scheme in {"https", "ssh"}
         and parsed.hostname is not None
         and supported_repository_host(parsed.hostname)
-        and parsed.username is None
+        and (
+            parsed.username is None
+            or (
+                parsed.scheme == "ssh"
+                and _URI_REG_NAME.fullmatch(parsed.username) is not None
+            )
+        )
         and parsed.password is None
         and (port is None or 0 <= port <= 65535)
         and bool(parsed.path.strip("/"))

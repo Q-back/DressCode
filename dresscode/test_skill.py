@@ -158,6 +158,14 @@ def test_skill_inside_git_ignores_invalid_local_config(
         "https://github.com/Q-back/DressCode.git",
         "https://git.example.invalid/fork/DressCode.git",
         "https://example.invalid/team/repo%20name.git",
+        "ssh://git@gitlab.service.osa/jpeczke/DressCode.git",
+        "ssh://git@example.invalid/team/repo.git",
+        "ssh://example.invalid/team/repo.git",
+        "ssh://deploy@example.invalid:2222/team/repo.git",
+        "ssh://example.invalid:2222/team/repo.git",
+        "ssh://git@[2001:db8::1]:2222/team/repo.git",
+        "ssh://git@example.invalid/team/repo%20name.git",
+        "ssh://git%2Ddeploy@example.invalid/team/repo.git",
     ],
 )
 def test_skill_pins_supported_git_sources(
@@ -172,8 +180,10 @@ def test_skill_pins_supported_git_sources(
 
     assert result.exit_code == 0, result.output
     command = f"uv tool install {shlex.quote(f'git+{url}@{commit}')}"
-    assert command in result.stdout
-    assert "git+https://github.com/Q-back/DressCode.git'" not in result.stdout
+    assert result.stdout == skill_text().replace(
+        "uv tool install 'git+https://github.com/Q-back/DressCode.git'", command, 1
+    )
+    assert result.stderr == ""
 
 
 @pytest.mark.parametrize("subdirectory", ["tools/dresscode", "", None, 17])
@@ -233,6 +243,32 @@ def test_skill_pin_ignores_unrelated_caller_head(
         "https://bad|host/repo.git",
         "https://[fe80::1%25bad|host]/repo.git",
         "https://[invalid]/team/repo.git",
+        "https://git@example.invalid/team/repo.git",
+        "https://git:@example.invalid/team/repo.git",
+        "ssh://git:secret@example.invalid/team/repo.git",
+        "ssh://git:@example.invalid/team/repo.git",
+        "ssh://:secret@example.invalid/team/repo.git",
+        "ssh:///team/repo.git",
+        "ssh://git@/team/repo.git",
+        "ssh://git@example.invalid",
+        "ssh://git@bad|host/team/repo.git",
+        "ssh://@example.invalid/team/repo.git",
+        "ssh://git@@example.invalid/team/repo.git",
+        "ssh://git|deploy@example.invalid/team/repo.git",
+        "ssh://git@[invalid]/team/repo.git",
+        "ssh://git@[fe80::1%25bad|host]/team/repo.git",
+        "ssh://git@example.invalid:bad/team/repo.git",
+        "ssh://git@example.invalid:65536/team/repo.git",
+        "ssh://git@example.invalid:-1/team/repo.git",
+        "ssh://git@example.invalid/team/repo.git?branch=main",
+        "ssh://git@example.invalid/team/repo.git#main",
+        "ssh://git@example.invalid/team/repo name.git",
+        "ssh://git@example.invalid/team/repo\n.git",
+        "ssh://git@example.invalid/team/repo\x00.git",
+        "ssh://git@example.invalid/team/repo`.git",
+        "ssh://git@example.invalid/team/repo%ZZ.git",
+        "ssh://git@example.invalid\\bad/team/repo.git",
+        "git@example.invalid:team/repo.git",
     ],
 )
 def test_skill_falls_back_for_unsupported_source_urls(
@@ -286,11 +322,19 @@ def test_skill_does_not_infer_a_pin_from_the_caller_checkout(
     assert result.stdout == skill_text()
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        "https://example.invalid",
+        "ssh://git@example.invalid:2222",
+        "ssh://example.invalid",
+    ],
+)
 def test_skill_quotes_the_complete_git_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
     marker = tmp_path / "executed"
-    url = f"https://example.invalid/team/repo$(touch${{IFS}}{marker}).git"
+    url = f"{source}/team/repo'$(touch${{IFS}}{marker}).git"
     commit = "e" * 40
     set_direct_url(monkeypatch, direct_url_json(url, commit))
 
@@ -299,7 +343,7 @@ def test_skill_quotes_the_complete_git_source(
     assert result.exit_code == 0, result.output
     assert command is not None
     executed = subprocess.run(
-        ["sh", "-c", f"set -- {command[1]}; printf '%s' \"$1\""],
+        ["sh", "-c", f'set -- {command[1]}; test "$#" -eq 1 && printf \'%s\' "$1"'],
         capture_output=True,
         text=True,
         check=False,

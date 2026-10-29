@@ -64,10 +64,16 @@ or correctness. An empty question list passes without reviewing anything.
 `dresscode --skill` prints a short, standalone `SKILL.md` to stdout and exits
 successfully, even outside a Git repository. It covers setup, the review workflow,
 and authoring useful rules. It reads no project configuration and changes nothing.
-When installed-package metadata has a supported HTTPS Git source and resolved
-commit, the export pins that source. Metadata declaring a package subdirectory is
-unsupported. For that or other unsupported metadata, it uses the official unpinned
-Git command, which may not match the installed version. It never infers a pin from
+When installed-package metadata has a supported HTTPS or SSH Git source and
+resolved commit, the export pins that source. SSH URLs use
+`ssh://[user@]host[:port]/path`; usernames and explicit ports are preserved.
+For example, `ssh://git@gitlab.example.com/team/DressCode.git` exports a
+`git+ssh://git@gitlab.example.com/team/DressCode.git@<commit>` install source.
+Authentication uses your SSH configuration and keys. HTTPS user information,
+SSH passwords (including empty passwords), SCP-style sources such as
+`git@host:path`, and metadata declaring a package subdirectory are unsupported.
+For those or other unsupported metadata, export uses the official unpinned Git
+command, which may not match the installed version. It never infers a pin from
 the caller's checkout. The skill's review flow records verdicts and reports
 findings; it does not edit reviewed code or grant waivers. The calling workflow
 handles fixes and accepted exceptions.
