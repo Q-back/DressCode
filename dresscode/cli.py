@@ -1,9 +1,15 @@
 """Command-line interface for DressCode."""
 
+import ipaddress
 import json
+import re
+import shlex
+import unicodedata
 from dataclasses import asdict
+from importlib.metadata import PackageNotFoundError, distribution
 from importlib.resources import files
 from typing import Annotated, NoReturn
+from urllib.parse import urlsplit
 
 import typer
 
@@ -37,6 +43,89 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 
+_OFFICIAL_INSTALL_COMMAND = (
+    "uv tool install 'git+https://github.com/Q-back/DressCode.git'"
+)
+_FULL_GIT_COMMIT = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
+_INVALID_PERCENT_ESCAPE = re.compile(r"%(?![0-9a-fA-F]{2})")
+_URI_REG_NAME = re.compile(r"(?:[A-Za-z0-9._~!$&'()*+,;=-]|%[0-9a-fA-F]{2})+\Z")
+
+
+def supported_repository_host(hostname: str) -> bool:
+    if ":" in hostname and "%" in hostname:
+        return False
+    try:
+        ipaddress.ip_address(hostname)
+    except ValueError:
+        try:
+            ascii_hostname = hostname.encode("idna").decode("ascii")
+        except UnicodeError:
+            return False
+        return _URI_REG_NAME.fullmatch(ascii_hostname) is not None
+    return True
+
+
+def supported_repository_url(url: str) -> bool:
+    if (
+        any(
+            char.isspace() or unicodedata.category(char) == "Cc" or char == "`"
+            for char in url
+        )
+        or "?" in url
+        or "#" in url
+        or "\\" in url
+        or _INVALID_PERCENT_ESCAPE.search(url) is not None
+    ):
+        return False
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname is not None
+        and supported_repository_host(parsed.hostname)
+        and parsed.username is None
+        and parsed.password is None
+        and (port is None or 0 <= port <= 65535)
+        and bool(parsed.path.strip("/"))
+    )
+
+
+def installed_source_pin() -> str | None:
+    try:
+        raw_url = distribution("dresscode").read_text("direct_url.json")
+        if raw_url is None:
+            return None
+        direct_url = json.loads(raw_url)
+    except PackageNotFoundError, OSError, ValueError:
+        return None
+    if not isinstance(direct_url, dict) or "subdirectory" in direct_url:
+        return None
+    vcs_info = direct_url.get("vcs_info")
+    if not isinstance(vcs_info, dict) or vcs_info.get("vcs") != "git":
+        return None
+    url = direct_url.get("url")
+    commit = vcs_info.get("commit_id")
+    if (
+        not isinstance(url, str)
+        or not supported_repository_url(url)
+        or not isinstance(commit, str)
+        or _FULL_GIT_COMMIT.fullmatch(commit) is None
+    ):
+        return None
+    return f"git+{url}@{commit}"
+
+
+def render_skill() -> str:
+    skill = files("dresscode").joinpath("SKILL.md").read_text(encoding="utf-8")
+    source = installed_source_pin()
+    if source is None:
+        return skill
+    install_command = f"uv tool install {shlex.quote(source)}"
+    return skill.replace(_OFFICIAL_INSTALL_COMMAND, install_command, 1)
+
 
 @app.callback(invoke_without_command=True)
 def options(
@@ -48,10 +137,7 @@ def options(
     ] = False,
 ) -> None:
     if skill:
-        typer.echo(
-            files("dresscode").joinpath("SKILL.md").read_text(encoding="utf-8"),
-            nl=False,
-        )
+        typer.echo(render_skill(), nl=False)
         raise typer.Exit()
 
 

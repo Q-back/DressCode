@@ -15,9 +15,10 @@ not as a replacement for those checks.
 
 ## Setup
 
-From a DressCode checkout, install with `uv tool install .` (uv and Python 3.14
-required). Run subsequent commands in the target Git repository. No questions are
-seeded; add rules as below. Use `dresscode <command> --help` for flags.
+If DressCode is missing, install it with
+`uv tool install 'git+https://github.com/Q-back/DressCode.git'` (uv and Python
+3.14 required). Run subsequent commands in the target Git repository. No questions
+are seeded; add rules as below. Use `dresscode <command> --help` for flags.
 
 ## Review
 
