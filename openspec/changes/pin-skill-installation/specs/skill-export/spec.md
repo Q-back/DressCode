@@ -20,10 +20,18 @@ Export standalone agent instructions with installation guidance that matches the
 
 ### Requirement: Safe repository URL
 
-Only credential-free HTTPS repository URLs with a host and repository path SHALL be supported. Malformed URLs and URLs with queries, fragments, whitespace, control characters or backticks SHALL fall back. When run, the generated command SHALL pass the complete Git source as one shell argument without executing URL content.
+Only HTTPS and `ssh://` repository URLs with valid hosts, repository paths and optional valid ports SHALL be supported. SSH usernames SHALL be allowed and preserved. HTTPS user information and SSH passwords SHALL be rejected. Malformed URLs and URLs with queries, fragments, whitespace, control characters or backticks SHALL fall back. Generated commands SHALL pass the complete unchanged Git source as one literal shell argument without executing URL content.
+
+#### Scenario: Installed SSH Git revision
+- **WHEN** metadata records `ssh://git@gitlab.service.osa/jpeczke/DressCode.git` and a full commit ID
+- **THEN** export includes a pinned `git+ssh://git@gitlab.service.osa/jpeczke/DressCode.git@<commit>` install source, preserving the SSH username
+
+#### Scenario: SSH source without a username or with an explicit port
+- **WHEN** metadata records a supported SSH URL without a username or with an explicit port, and a full commit ID
+- **THEN** export uses that URL unchanged and pins it to the recorded commit
 
 #### Scenario: Unsafe or unsupported source URL
-- **WHEN** metadata contains credentials, a non-HTTPS URL, a malformed URL, a query, a fragment, whitespace, a control character or a backtick
+- **WHEN** metadata contains HTTPS user information, an SSH password (including an empty password), an unsupported scheme, an SCP-style source such as `git@host:path`, a malformed URL, a query, a fragment, whitespace, a control character or a backtick
 - **THEN** export uses the fallback command without including that URL in the skill
 
 #### Scenario: Shell metacharacters in a supported URL
