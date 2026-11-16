@@ -101,3 +101,7 @@ type checks for things they can verify automatically.
 See the [manual](docs/manual.md) for configuration, context commands, accepted
 exceptions and command details, or [development](docs/manual.md#development)
 to work on DressCode itself.
+
+See the [changelog](CHANGELOG.md) for release notes. Maintainers can use the
+[release skill](.agents/skills/dresscode-release/SKILL.md) to prepare a version
+and tag.
