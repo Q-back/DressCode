@@ -1,0 +1,82 @@
+# Spec Delta
+
+## MODIFIED Requirements
+
+### Requirement: Hand-over boundary
+
+The system SHALL provide `dresscode check` as an explicit gate over the final cumulative committed diff, not individual commits. The documented workflow SHALL require tests, a commit, fresh-context review and a successful gate before hand-over. Fixes SHALL be committed before re-review. DressCode SHALL NOT install or require Git hooks, and intermediate commits SHALL NOT require current verdicts.
+
+#### Scenario: Intermediate commits without review
+- **WHEN** the agent makes multiple intermediate commits while configured entries remain unanswered
+- **THEN** DressCode does not block those commits
+- **AND** an explicit `dresscode check` still exits `1` until the clean committed cumulative diff has current passing verdicts or waivers
+
+#### Scenario: Final result is gated
+- **WHEN** the agent is ready to hand over the task
+- **THEN** the documented workflow requires `dresscode check` to exit `0` against the final committed snapshot before declaring the task done
+
+### Requirement: Green condition
+
+The system SHALL exit `0` from `dresscode check` only when the working tree is clean and every enabled, non-retired entry has a current verdict that matches `expects`, is `n-a`, or is covered by a current waiver. Freshness SHALL use the selected baseline and full reviewed commit ID. Dirty-tree errors SHALL follow the clean-tree contract even when no entries are configured.
+
+#### Scenario: All matching
+- **WHEN** the tree is clean and every entry has a current expected answer
+- **THEN** `check` exits `0` and reports the run green
+
+#### Scenario: Empty list
+- **WHEN** the tree is clean and no entries are configured
+- **THEN** `check` exits `0`
+
+#### Scenario: Empty list with dirty tree
+- **WHEN** the tree is dirty and no entries are configured
+- **THEN** `check` exits `2` rather than passing an uncommitted snapshot
+
+### Requirement: Waivers
+
+The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry whose current verdict contradicts `expects`. It SHALL store the reason, timestamp and full reviewed `head_commit`, and SHALL make `check` exit `0` with status `passed-with-waivers`. A waiver SHALL become stale whenever `HEAD` differs from that commit and SHALL NOT outlive its baseline-keyed run. Waivers SHALL NOT use diff fingerprints.
+
+#### Scenario: Documented violation ships
+- **WHEN** the size question has a current `--no` answer and is waived with a reason on a clean checkout
+- **THEN** `check` exits `0` and reports status `passed-with-waivers`
+
+#### Scenario: Waiving a satisfied entry
+- **WHEN** `waive` targets an entry answered as expected
+- **THEN** it is refused with exit `2`
+
+#### Scenario: Reason required
+- **WHEN** `waive` runs with empty or missing `--reason`
+- **THEN** it is refused with exit `2`
+
+#### Scenario: Waiver expires with the diff
+- **WHEN** `HEAD` changes after a waiver is recorded, including a commit that changes only excluded files
+- **THEN** the waiver is stale and the entry blocks the gate again
+
+### Requirement: Human report
+
+The system SHALL provide `dresscode report` with its existing colored summary, per-entry verdicts, evidence, reveal, context and separate waivers section. It SHALL use the committed baseline-to-`HEAD` comparison and show commit metadata instead of fingerprints. Dirty trees SHALL NOT prevent reporting: the report SHALL warn that local edits are not covered, expose `working_tree_dirty` in JSON and use overall status `failed` while dirty. Reporting a blocked review SHALL still exit `0`.
+
+#### Scenario: Report after a green run
+- **WHEN** `dresscode report` runs on a clean green run
+- **THEN** it shows every question with its verdict and evidence
+
+#### Scenario: Structured report
+- **WHEN** `dresscode report --json` runs
+- **THEN** the output includes overall status, committed diff size, full baseline and reviewed commit IDs, `working_tree_dirty`, per-entry verdicts with evidence and reveal, and waivers
+- **AND** no diff `fingerprint` is emitted
+
+#### Scenario: Waivers are visible
+- **WHEN** the run passed with waivers
+- **THEN** the report shows a separate waivers section with each reason
+
+#### Scenario: Plain output when redirected
+- **WHEN** output is not a TTY
+- **THEN** the report contains no ANSI escape sequences
+
+#### Scenario: Dirty checkout remains inspectable
+- **WHEN** a recorded review exists for the current commit and the working tree has local edits
+- **THEN** `report` exits `0`, retains the recorded evidence and per-entry commit freshness, and warns that the edits are not covered
+- **AND** its overall status is `failed`, `working_tree_dirty` is true and its diff counts exclude local edits
+
+#### Scenario: HEAD changed after review
+- **WHEN** `report` runs after a different commit becomes `HEAD` in the same run
+- **THEN** it preserves recorded evidence and marks previous answers and waivers stale, using the existing report layout
