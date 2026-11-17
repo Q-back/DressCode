@@ -1,0 +1,11 @@
+# Tasks
+
+## 1. Commit: Teach and exercise historical rule validation
+
+Deliver the standalone skill, matching manual guidance and their regression tests together. Follow [the rule-authoring spec](specs/rule-authoring/spec.md) for behavior and [design.md](design.md) for the procedure.
+
+- [ ] 1.1 Add a failing executable-recipe test in `dresscode/test_skill.py`, using real temporary Git history, separate case XDG homes and explicitly scripted verdicts. Verify a common pinned baseline, candidate-only configuration despite historical local rules, sealed question delivery, the offending gate's expected exit `1`, the corrected gate's exit `0`, both expectation polarities, and unchanged normal config/state. Label this as CLI-mechanics coverage, not proof of agent detection.
+- [ ] 1.2 Extend `dresscode/SKILL.md` with the complete authoring and historical validation procedure, neutral reviewer input template, safe environment setup, expected-result checks, escalation and evidence report. Verify the new recipe test passes and inspect the export against every scenario in `specs/rule-authoring/spec.md`, including legitimate removal of applicability and rerunning both cases after a candidate revision.
+- [ ] 1.3 Update `docs/manual.md` to explain mandatory paired validation and link to the bundled procedure. Verify it agrees with the exported skill and introduces no unsupported CLI flags or automatic validation claims.
+- [ ] 1.4 Add focused export regression checks for the two independent reviews, both required controls and escalation when history is missing. Verify the existing authoring and exact-baseline examples, plain-Markdown export and installation-source pinning still pass with `uv run pytest dresscode/test_skill.py dresscode/test_scoped_workflow.py`.
+- [ ] 1.5 Run the full project checks: `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .` and `uv run ty check`. Inspect the cumulative diff and commit the working outcome. Complete review, any separately committed fixes and re-review under the active `AGENTS.md` Review effort policy and this repository's `AGENTS.md` hand-over requirements. Verify the final cumulative tests and required DressCode gate pass before hand-over; report any blocker without claiming completion.
