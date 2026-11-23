@@ -22,7 +22,7 @@
   - Excluded paths and dirty submodules still block review.
   - Ignored files do not block review.
   - Configuration, `trust`, `reset` and reporting remain usable when dirty.
-- **[Context stability](specs/context-commands/spec.md#requirement-context-collection-stays-on-the-reviewed-commit)** *(new, agent decision)*: reject the invocation's context results if a context command leaves local changes or moves `HEAD`.
+- **[Context command safety](specs/context-commands/spec.md#requirement-context-collection-stays-on-the-reviewed-commit)** *(new, agent decision)*: `list` can run commands that provide extra context for review questions. If a command leaves uncommitted changes or changes `HEAD`, `list` fails with an error saying that the repository changed, and saves none of the context collected during that run.
   - Recheck the checkout before saving any results from that invocation.
   - Keep previously saved context untouched on rejection.
 
