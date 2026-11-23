@@ -30,7 +30,6 @@
 
 - **[Report boundary](specs/verdict-gate/spec.md#requirement-human-report)**: report committed diff counts and recorded evidence even when the working tree is dirty.
   - Was: report used working-tree counts and fingerprint-based freshness.
-  - Preserve existing rule blocks, context, reveals, waivers and successful command exit for blocked reviews.
   - Add only commit metadata and a warning that local edits are not covered.
   - Use JSON `working_tree_dirty` and overall status `failed` while dirty *(agent decision)*, as described in the [minimal report adaptation](design.md#5-give-report-the-smallest-necessary-adaptation).
 
