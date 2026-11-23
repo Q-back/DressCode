@@ -8,7 +8,7 @@
   - Was: compare the baseline with working content, including uncommitted work.
   - Commit implementation and tested fixes before each review.
 - **[Approval freshness](specs/review-cycle/spec.md#requirement-verdicts-expire-with-the-reviewed-commit)**: answers apply to one exact reviewed commit within the selected baseline scope.
-  - Was: matching content fingerprints preserved approvals across commits.
+  - Was: approvals stayed valid when the reviewed files’ contents stayed the same, even if the commit changed.
   - [Waivers](specs/verdict-gate/spec.md#requirement-waivers) and [cached context](specs/context-commands/spec.md#requirement-scope-local-context-evidence) use the same commit boundary.
   - Message-only amendments, empty commits and excluded-only commits need fresh review.
 - **[Review metadata](specs/diff-scope/spec.md#requirement-diff-command)**: expose full `head_commit` alongside `base_commit` and `run_key`.
