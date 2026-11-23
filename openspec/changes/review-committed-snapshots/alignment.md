@@ -37,5 +37,5 @@
 
 - **[Old approvals](specs/review-cycle/spec.md#requirement-legacy-run-safety)**: require new commit-bound answers instead of importing fingerprint-based verdicts, waivers or context.
   - Was: existing baseline-keyed fingerprint reviews could satisfy the gate.
-  - Retain old files and shared counters, retirements and trust.
+  - Leave old review-state files in `$XDG_STATE_HOME/dresscode/runs/` untouched (default: `~/.local/state/dresscode/runs/`). Keep shared counters, retirements and trust.
   - Reset relevant scopes with the older CLI before relying on its gate after downgrade.
