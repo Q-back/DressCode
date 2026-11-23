@@ -5,70 +5,72 @@ import pytest
 from typer.testing import CliRunner
 
 from dresscode.cli import app
-from dresscode.diff import DiffError
 from dresscode.test_diff import git, scope
 
 
-@pytest.mark.parametrize("change", ["unstaged", "staged", "untracked"])
+@pytest.mark.parametrize(
+    "change", ["unstaged", "staged", "untracked", "excluded", "pointer"]
+)
 def test_dirty_submodule_is_rejected_even_when_git_config_hides_it(
-    submodule_repo: tuple[Path, Path], change: str
+    submodule_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, change: str
 ) -> None:
     root, submodule = submodule_repo
+    monkeypatch.chdir(root)
     git(root, "config", "diff.ignoreSubmodules", "all")
     git(root, "config", "submodule.lib.ignore", "all")
     git(submodule, "config", "status.showUntrackedFiles", "no")
+    if change == "excluded":
+        (root / ".dresscode.toml").write_text('[diff]\nexclude = ["lib"]\n')
+        git(root, "add", ".dresscode.toml")
+        git(root, "commit", "-m", "Exclude lib from review scope")
     path = submodule / ("new.txt" if change == "untracked" else "file.txt")
     path.write_text("new\n")
     if change == "staged":
         git(submodule, "add", "file.txt")
-    with pytest.raises(DiffError, match="dirty submodule 'lib'"):
-        scope(root)
+    if change == "pointer":
+        git(submodule, "commit", "--all", "-m", "Move submodule pointer")
+
+    result = CliRunner().invoke(app, ["check", "--json"])
+    assert result.exit_code == 2, result.output
+    assert "Working tree is dirty: 'lib'" in json.loads(result.stdout)["error"]
 
 
-def test_excluded_dirty_submodule_does_not_affect_scope(
-    submodule_repo: tuple[Path, Path],
+def test_ignored_submodule_file_does_not_block_review(
+    submodule_repo: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, submodule = submodule_repo
-    before = scope(root, diff={"exclude": ["lib"]})
-    (submodule / "file.txt").write_text("dirty\n")
-    (submodule / "untracked.txt").write_text("untracked\n")
-    assert scope(root, diff={"exclude": ["lib"]}) == before
-
-
-def test_ignored_submodule_file_does_not_block_diff(
-    submodule_repo: tuple[Path, Path],
-) -> None:
-    root, submodule = submodule_repo
-    before = scope(root)
+    monkeypatch.chdir(root)
     (submodule / "ignored.cache").write_text("ignored\n")
-    assert scope(root) == before
+    result = CliRunner().invoke(app, ["check", "--json"])
+    assert result.exit_code == 0, result.output
 
 
-def test_clean_submodule_covers_only_commit_pointer_and_is_staging_invariant(
+def test_committed_submodule_diff_covers_only_parent_pointer(
     submodule_repo: tuple[Path, Path],
 ) -> None:
     root, submodule = submodule_repo
-    before = scope(root)
+    initial = scope(root)
     (submodule / "file.txt").write_text("first\n")
     git(submodule, "commit", "--all", "--message", "First change")
+    assert scope(root) == initial
+    git(root, "add", "lib")
+    assert scope(root) == initial
+    git(root, "commit", "--message", "Update pointer")
+
     changed = scope(root)
     assert [(file.path, file.added, file.removed) for file in changed.files] == [
         ("lib", 1, 1)
     ]
-    assert changed.fingerprint != before.fingerprint
+    assert changed.scope.head_commit != initial.scope.head_commit
     for display in ("short", "log", "diff"):
         git(root, "config", "diff.submodule", display)
         assert scope(root) == changed
-    git(root, "add", "lib")
-    assert scope(root) == changed
-    git(root, "commit", "--message", "Update pointer")
-    assert scope(root) == changed
     (submodule / "file.txt").write_text("other\n")
     git(submodule, "commit", "--all", "--message", "Other change")
-    assert scope(root).fingerprint != changed.fingerprint
+    assert scope(root) == changed
 
 
-def test_uninitialized_clean_submodule_does_not_inspect_parent_status(
+def test_uninitialized_submodule_still_reports_committed_pointer(
     submodule_repo: tuple[Path, Path],
 ) -> None:
     root, submodule = submodule_repo
@@ -78,9 +80,8 @@ def test_uninitialized_clean_submodule_does_not_inspect_parent_status(
     git(root, "commit", "--message", "Update parent pointer")
     before = scope(root)
     git(root, "submodule", "deinit", "--", "lib")
+    assert [file.path for file in before.files] == ["lib"]
     assert scope(root) == before
-    (root / "README.md").write_text("parent edit\n")
-    assert [file.path for file in scope(root).files] == ["README.md", "lib"]
 
 
 @pytest.mark.parametrize("dirty", ["tracked", "untracked-hidden", "deep-hidden"])
@@ -143,12 +144,13 @@ def test_dirty_nested_submodule_is_rejected(
             )
             == ""
         )
-    with pytest.raises(DiffError, match="dirty submodule 'lib'"):
-        scope(root)
     monkeypatch.chdir(root)
     result = CliRunner().invoke(app, ["diff", "--json"])
     assert result.exit_code == 2, result.output
-    assert "dirty submodule 'lib'" in json.loads(result.stdout)["error"]
+    assert "Working tree is dirty: 'lib'" in json.loads(result.stdout)["error"]
+    report = CliRunner().invoke(app, ["report", "--json"])
+    assert report.exit_code == 0, report.output
+    assert json.loads(report.stdout)["working_tree_dirty"] is True
 
 
 def test_submodule_replaced_by_symlink_does_not_inspect_its_target(
@@ -189,7 +191,7 @@ def test_cli_dirty_submodule_error_is_actionable_and_read_only(
     else:
         message = result.stderr
         assert result.stdout == ""
-    assert "dirty submodule 'lib'" in message
+    assert "Working tree is dirty: 'lib'" in message
     assert "commit" in message.lower()
     assert "diff.exclude" in message
     assert git(root, "status", "--porcelain=v1", "--ignore-submodules=none") == before
@@ -198,6 +200,9 @@ def test_cli_dirty_submodule_error_is_actionable_and_read_only(
     assert list((xdg_home / "state").iterdir()) == []
     git(submodule, "commit", "--all", "--message", "Commit reviewed content")
     git(root, "add", "lib")
+    staged = CliRunner().invoke(app, ["diff", "--json"])
+    assert staged.exit_code == 2, staged.output
+    git(root, "commit", "-m", "Update parent pointer")
     clean = CliRunner().invoke(app, ["diff", "--json"])
     assert clean.exit_code == 0, clean.output
     assert json.loads(clean.stdout)["files"] == [

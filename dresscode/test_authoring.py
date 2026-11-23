@@ -12,6 +12,7 @@ from dresscode.config import layer_paths, load
 from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.store import EntryStore
+from dresscode.test_diff import commit_all
 
 runner = CliRunner()
 QUESTION = 'Did you reuse the "existing" factory?'
@@ -51,6 +52,8 @@ def test_add_round_trips_to_sealed_listing(git_repo: Path, layer: str | None) ->
         "path": str(layer_paths(repository)[layer or "repo"][0]),
     }
     assert load(repository).entries[0].reveal == "SECRET"
+    if layer in (None, "repo"):
+        commit_all(git_repo)
     assert json.loads(run("list", "--json").stdout) == {
         **resolve_scope(load(repository)).metadata(),
         "entries": [{"id": "factory", "question": QUESTION}],
@@ -100,6 +103,7 @@ def test_retire_keeps_history_and_counters_without_config_writes(
     git_repo: Path, reason: str | None
 ) -> None:
     run(*ADD)
+    commit_all(git_repo)
     repository = discover(git_repo)
     store = EntryStore(repository)
     entry = load(repository).entries[0]
@@ -135,6 +139,7 @@ def test_retire_keeps_history_and_counters_without_config_writes(
 
 def test_disabled_entries_are_not_listed(git_repo: Path) -> None:
     run(*ADD)
+    commit_all(git_repo)
     path = layer_paths(discover(git_repo))["private"][0]
     path.parent.mkdir(parents=True)
     path.write_text('[[entries]]\nid="factory"\nenabled=false\n')
@@ -187,5 +192,7 @@ def test_installed_entry_point_can_author_and_list(git_repo: Path) -> None:
             text=True,
             check=False,
         )
-        assert result.returncode == 0, result.stderr
+        assert result.returncode == 0, result.stdout + result.stderr
+        if arguments == ADD:
+            commit_all(git_repo)
     assert json.loads(result.stdout)["entries"][0]["id"] == "factory"

@@ -10,7 +10,7 @@ from typer.testing import CliRunner
 
 from dresscode.cli import app
 from dresscode.test_cli import normalize_help_text
-from dresscode.test_diff import git
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 REVIEW_COMMANDS = ("diff", "list", "answer", "waive", "check", "report", "reset")
@@ -49,7 +49,7 @@ def revisions(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, st
 def test_exact_single_commit_revisions(
     revisions: tuple[Path, str], selector: str, positional: bool
 ) -> None:
-    _, first = revisions
+    root, first = revisions
     reference = (
         first
         if selector == "sha"
@@ -63,11 +63,13 @@ def test_exact_single_commit_revisions(
     assert result.stderr == ""
     response = json.loads(result.stdout)
     assert response["base_commit"] == first
-    assert "merge_base" not in response
+    assert response["head_commit"] == git(root, "rev-parse", "HEAD")
+    assert {"fingerprint", "merge_base"}.isdisjoint(response)
     assert response["files"] == [{"path": "second.txt", "added": 1, "removed": 0}]
     assert json.loads(response["run_key"])[-1] == first
     plain = runner.invoke(app, ["diff", *arguments])
     assert first in plain.stdout
+    assert response["head_commit"] in plain.stdout
 
 
 @pytest.mark.parametrize("json_output", [False, True])
@@ -130,6 +132,7 @@ def test_all_review_commands_accept_base_and_reject_empty(
     (revisions[0] / ".dresscode.toml").write_text(
         '[[entries]]\nid="rule"\nquestion="Review?"\nexpects=true\n'
     )
+    commit_all(revisions[0])
     result = runner.invoke(app, [command, *extras, "--base", "", "--json"])
     assert result.exit_code == 2
     assert result.stderr == ""
@@ -190,6 +193,7 @@ def test_explicit_refs_ignore_defaults_and_handle_unrelated_history(
 ) -> None:
     root, first = revisions
     (root / ".dresscode.toml").write_text('merge_base_with="missing"\n')
+    commit_all(root)
     for reference in (first, "HEAD"):
         result = runner.invoke(app, ["diff", "--base", reference, "--json"])
         assert result.exit_code == 0, result.output

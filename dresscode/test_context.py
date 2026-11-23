@@ -13,6 +13,7 @@ from dresscode.config import layer_paths, load
 from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.run import RunStore
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 
@@ -33,6 +34,8 @@ def configure(root: Path, command: str, layer: str = "repo", timeout: float = 10
         'id = "size"\nquestion = "Small?"\nexpects = true\nreveal = "SECRET"\n'
         f"context = {json.dumps(command)}\n"
     )
+    if layer == "repo":
+        commit_all(root)
     return path
 
 
@@ -61,6 +64,7 @@ def test_trust_delivery_and_recorded_report(git_repo: Path, directory: bool):
     assert "evidence" in runner.invoke(app, ["report"]).stdout
     with rules.open("a") as output:
         output.write("\n# changed\n")
+    commit_all(git_repo)
     assert invoke("list")["entries"][0]["state"] == "context_untrusted"
     assert invoke("check", code=1)["entries"][0]["state"] == "context_untrusted"
 
@@ -79,8 +83,10 @@ def test_context_provenance_survives_field_overrides(git_repo: Path):
     configure(git_repo, "printf global", "global")
     local = layer_paths(discover(git_repo))["repo"][0]
     local.write_text('[[entries]]\nid="size"\nquestion="Local?"\n')
+    commit_all(git_repo)
     assert invoke("list")["entries"][0]["context_output"] == "global"
     local.write_text('[[entries]]\nid="size"\ncontext="printf local"\n')
+    commit_all(git_repo)
     private = layer_paths(discover(git_repo))["private"][0]
     private.parent.mkdir(parents=True, exist_ok=True)
     private.write_text('[[entries]]\nid="size"\nquestion="Private?"\n')
@@ -127,9 +133,12 @@ def test_answer_preserves_delivered_output_without_rerunning(
         ]
         == "first"
     )
-    (git_repo / "new.py").write_text("changed")
+    git(git_repo, "commit", "--allow-empty", "-m", "New review snapshot")
     assert invoke("check", code=1)["entries"][0]["state"] == "stale"
     invoke("answer", "size", "--yes", "--evidence", "Reviewed", code=2)
+    invoke("list")
+    invoke("answer", "size", "--yes", "--evidence", "Reviewed again")
+    assert invoke("check")["status"] == "passed"
 
 
 def test_large_output_is_capped_and_recorded(git_repo: Path):
@@ -150,6 +159,7 @@ def test_invalid_timeout_is_a_configuration_error(git_repo: Path, value: str):
     rules.write_text(
         rules.read_text().replace("timeout_seconds = 10", f"timeout_seconds = {value}")
     )
+    commit_all(git_repo)
     error = invoke("list", code=2)["error"]
     assert "timeout_seconds" in error
     assert str(rules) in error
@@ -158,16 +168,25 @@ def test_invalid_timeout_is_a_configuration_error(git_repo: Path, value: str):
 def test_real_diff_context_from_subdirectory(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ):
+    (git_repo / "before.py").write_text("not in selected scope\n")
+    commit_all(git_repo)
+    baseline = git(git_repo, "rev-parse", "HEAD")
     configure(git_repo, "dresscode diff --numstat")
     (git_repo / "new.py").write_text("new line\n")
+    commit_all(git_repo)
     subdirectory = git_repo / "sub"
     subdirectory.mkdir()
     monkeypatch.chdir(subdirectory)
     invoke("trust")
-    output = invoke("list")["entries"][0]["context_output"]
+    output = invoke("list", "--base", baseline)["entries"][0]["context_output"]
     assert "1\t0\tnew.py" in output and "TOTAL" in output
-    invoke("answer", "size", "--yes", "--evidence", "Reviewed counts")
-    assert invoke("report")["entries"][0]["context_output"] == output
+    assert "before.py" not in output
+    invoke(
+        "answer", "--base", baseline, "size", "--yes", "--evidence", "Reviewed counts"
+    )
+    assert (
+        invoke("report", "--base", baseline)["entries"][0]["context_output"] == output
+    )
 
 
 def test_directory_membership_invalidates_trust(git_repo: Path):
@@ -176,9 +195,11 @@ def test_directory_membership_invalidates_trust(git_repo: Path):
     invoke("trust")
     extra = git_repo / ".dresscode" / "extra.toml"
     extra.write_text("# new file\n")
+    commit_all(git_repo)
     assert invoke("list")["entries"][0]["state"] == "context_untrusted"
     invoke("trust")
     extra.unlink()
+    commit_all(git_repo)
     assert invoke("list")["entries"][0]["state"] == "context_untrusted"
 
 
@@ -216,6 +237,43 @@ def test_changed_global_command_requires_new_delivery(git_repo: Path, waived: bo
     assert invoke("check")["status"] == "passed"
     assert invoke("report")["entries"][0]["context_output"] == "second"
     assert invoke("report")["entries"][0]["context_command"] == "printf second"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "printf dirty > README.md",
+        "touch untracked.txt",
+        "git commit --allow-empty -m moved",
+    ],
+    ids=["tracked", "untracked", "head"],
+)
+def test_context_checkout_change_discards_all_results_and_preserves_saved_evidence(
+    git_repo: Path, mutation: str
+):
+    configure(git_repo, "printf saved", "global")
+    invoke("list")
+    run = RunStore(resolve_scope(load(discover(git_repo))))
+    saved = run.path.read_bytes()
+    rules = configure(git_repo, "printf replacement", "global")
+    with rules.open("a") as output:
+        output.write(
+            '\n[[entries]]\nid = "mutator"\nquestion = "Mutated?"\nexpects = false\n'
+            f"context = {json.dumps(mutation)}\n"
+        )
+
+    error = invoke("list", code=2)["error"]
+    assert "Checkout changed" in error
+    assert run.path.read_bytes() == saved
+    invoke("answer", "mutator", "--yes", "--evidence", "Unavailable", code=2)
+
+
+def test_dirty_tree_blocks_context_before_execution(git_repo: Path, tmp_path: Path):
+    marker = tmp_path / "executed"
+    configure(git_repo, f"touch {shlex.quote(str(marker))}", "global")
+    (git_repo / "README.md").write_text("dirty\n")
+    assert "Working tree is dirty" in invoke("list", code=2)["error"]
+    assert not marker.exists()
 
 
 def test_large_finite_timeout_is_supported(git_repo: Path):

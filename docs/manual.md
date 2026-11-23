@@ -19,7 +19,7 @@ use `{"status": "error", "error": "..."}` and exit `2`.
 - [Inspect the current diff](#inspect-the-current-diff)
 - [Review an exact commit](#review-an-exact-commit)
 - [Exclusions](#exclusions)
-- [Output and fingerprints](#output-and-fingerprints)
+- [Output and commit metadata](#output-and-commit-metadata)
 - [Submodules](#submodules)
 - [Development](#development)
 
@@ -37,6 +37,16 @@ Without a tool installation, run from the checkout:
 uv run dresscode --help
 ```
 
+This version starts fresh commit-bound reviews. JSON consumers must use
+`head_commit` instead of `fingerprint`. Old verdict, waiver and context files in
+`$XDG_STATE_HOME/dresscode/runs/` stay untouched and cannot satisfy the new gate.
+Counters, retirements and context trust are retained. Review again after upgrading.
+
+**After downgrading, run `dresscode reset` with the older CLI for each relevant
+repository, branch and baseline, then review again before relying on its gate.**
+For versions without baseline support, reset each repository and branch. Older
+binaries can otherwise reuse retained approvals.
+
 ## Agent integration
 
 DressCode is a CLI over Git and a state store. It never launches agents, calls a
@@ -47,19 +57,21 @@ supported by your harness. Add this instruction to the **target project's**
 `AGENTS.md` or equivalent harness configuration:
 
 ```text
-For code changes, use the DressCode skill before hand-over. Have a fresh-context
-reviewer inspect the final cumulative diff and answer the listed questions with
-evidence, without seeing the sealed expectations or reveals. Resolve findings
-and obtain new verdicts after edits. Require dresscode check to pass and show
-dresscode report. Only waive a violation when an exception is explicitly accepted.
+For code changes, run tests and commit before review. Have a fresh-context
+reviewer inspect the final cumulative committed diff and answer the questions
+with evidence, without seeing the sealed expectations or reveals. Test and
+commit fixes before requesting another review. Require dresscode check to
+pass and show dresscode report. Only waive a violation when an exception is
+explicitly accepted.
 For review-only tasks, record answers and report findings without editing code,
 adding waivers or running dresscode check.
 ```
 
 DressCode does not install Git hooks or block intermediate commits. The harness
 must require the final check. A pass confirms that recorded answers satisfy the
-configured questions for the current diff; it cannot prove reviewer independence
-or correctness. An empty question list passes without reviewing anything.
+configured questions for the reviewed commit; it cannot prove reviewer
+independence or correctness. A clean checkout with no questions passes without
+reviewing anything.
 
 `dresscode --skill` prints a short, standalone `SKILL.md` to stdout and exits
 successfully, even outside a Git repository. It covers setup, the review workflow,
@@ -123,15 +135,17 @@ dresscode add test-factory \
   --question "Did you reuse an existing test factory?" \
   --expects true \
   --reveal "Prefer the existing factory over a hand-rolled mock."
+# Commit the rule before listing; use the path printed by add.
+git add -- .dresscode.toml
+git commit -m "Add test factory review question"
 dresscode list
 dresscode list --json
-# {"entries": [{"id": "test-factory", "question": "Did you reuse an existing test factory?"}]}
 dresscode retire test-factory --reason "now an ast-grep rule"
 ```
 
 `add <id>` requires `--question` and `--expects true|false`. Optional flags are `--reveal`, `--context`, `--layer repo|private|global` (default `repo`) and `--json`. It appends a definition without dropping comments or unrelated TOML settings. With `.dresscode/`, it uses the last existing TOML file in filename order, or `rules.toml` if the directory is empty. Otherwise it writes `.dresscode.toml`. Global and private destinations are the files in the configuration table above. Layer precedence still applies to repeated IDs.
 
-`list` emits only enabled, non-retired entries as `id` and `question`, plus context evidence when configured, in both text and JSON. It never exposes `expects` or `reveal` and does not increment counters. An empty list is successful; `--json` returns `{"entries": []}`. Reading an empty store creates no state files.
+`list` emits only enabled, non-retired entries as `id` and `question`, plus context evidence when configured, in both text and JSON. It never exposes `expects` or `reveal` and does not increment counters. An empty list is successful; `--json` includes `entries: []` alongside scope metadata. Reading an empty store creates no state files.
 
 `retire <id> [--reason <text>]` removes an entry from future listings for this repository, across branches and linked worktrees. The reason is optional and defaults to empty. Retirement preserves the entry snapshot, reason and timestamp in `$XDG_STATE_HOME/dresscode/entries.sqlite3` (default state home: `~/.local/state`). Existing counters are kept, and configuration files are not modified. Unknown or already-retired IDs exit `2`.
 
@@ -153,7 +167,7 @@ reveal = "Keep changes small enough to review in one sitting."
 context = "dresscode diff --numstat"
 ```
 
-Inspect repository-local commands before allowing them to run:
+Commit the rule and inspect repository-local commands before allowing them to run:
 
 ```sh
 dresscode trust
@@ -185,9 +199,14 @@ its first 16 KiB, with `[truncated]` appended when more was emitted; capture use
 bounded memory. Listing succeeds while surfacing these per-entry blockers;
 `check` exits `1` for them, even with an earlier passing or `n-a` answer.
 
-`list` saves delivered context in global run state, tied to the current diff and
-command. For context entries, `answer` requires a successful current delivery;
-run `list` again after changing the diff or command. A changed or removed command
+`list` saves delivered context in global run state, tied to the reviewed
+`head_commit` and command. If `HEAD` moves or the tree is dirty after the commands
+finish, `list` exits `2` and saves none of that invocation's results. Previous
+saved context stays intact. This is not a sandbox or a check for changes that
+were fully undone before `list` finished.
+
+For context entries, `answer` requires a successful current delivery; run `list`
+again after changing the reviewed commit or command. A changed or removed command
 also stales existing answers and waivers; relisting alone cannot renew them.
 `answer` copies the delivered output and command into the verdict, rather than
 rerunning the command. `report` shows the recorded
@@ -196,8 +215,8 @@ executes commands. Reset also clears delivered context.
 
 ## Record and reset a review
 
-Give the listed question to a fresh-context reviewer, then record its answer with
-non-empty evidence:
+Test and commit the change before review. Give the listed question to a
+fresh-context reviewer, then record its answer with non-empty evidence:
 
 ```sh
 dresscode list
@@ -213,24 +232,16 @@ history.
 
 Run state is JSON in `$XDG_STATE_HOME/dresscode/runs/` (default:
 `~/.local/state/dresscode/runs/`). Each repository, branch and resolved baseline commit has a separate run;
-detached checkouts use `detached-<short-sha>`. Every answer records the current
-diff fingerprint and timestamp. A scoped change makes the verdict stale and
-requires a new answer before `dresscode check` can pass. Excluded changes do
-not stale it. `dresscode reset` clears current verdicts and waivers for this run
-without changing counters; past re-answers remain in history.
+detached checkouts use `detached-<short-sha>`. Every answer records the full
+`head_commit` and a timestamp. A different `HEAD` makes the answer stale, even
+after an empty commit, a message-only amendment or a commit that changes only
+excluded files. Returning to the exact saved commit restores freshness if the
+run and review rules still match. `dresscode reset` clears current verdicts and
+waivers without changing counters or history.
 
-Every successful review command includes top-level `run_key` and `base_commit`
-in JSON and identifies the baseline in text. The run key uses a versioned
-namespace; a changed default baseline starts a separate review even when its
-content fingerprint matches. Equivalent default targets share a run when their
-merge bases match. Context subprocesses receive the pinned baseline through
-`DRESSCODE_BASE_COMMIT`; nested review commands use it before default selection.
-
-Legacy runs lack baseline identity. Their files stay untouched, but cannot
-supply answers, context or waivers to new runs. Review again after upgrading;
-counters, retirements and context trust are retained. **After downgrading, run
-the legacy `dresscode reset` in every repository/branch before relying on its
-gate, then review again.** Older binaries can otherwise reuse retained approvals.
+Successful review commands identify `base_commit`, `head_commit` and `run_key`
+in JSON and show both commits in text. Equivalent default targets share a run
+when their merge bases match. Review state cannot cross baselines.
 
 ## Gate hand-over and report the result
 
@@ -242,8 +253,9 @@ dresscode check --strict
 dresscode report
 ```
 
-`check` requires every enabled, non-retired entry to have a current matching or
-`n-a` verdict, or a current waiver. No entries means a pass. Its status is
+`check` requires a clean tree and a current matching or `n-a` verdict, or a
+current waiver, for every enabled, non-retired entry. With no entries a clean
+checkout passes. Its status is
 `passed`, `passed-with-waivers`, or `failed`. For each blocker, it names the ID,
 question, state (`unanswered`, `stale`, `context_untrusted`, `context_failed`, or `violated`) and the
 next commands. `check --json` returns `status` and `entries`, each with `id`,
@@ -252,8 +264,8 @@ revealing sealed fields.
 
 `waive <id> --reason <text>` requires a non-empty reason and a **current violating
 verdict**. It cannot replace an unanswered, stale, matching or `n-a` answer.
-The reason, timestamp and diff fingerprint are stored in the run. A scoped edit
-expires the waiver; re-answering removes it, and reset clears all current waivers.
+The reason, timestamp and `head_commit` are stored in the run. A different `HEAD`
+makes the waiver stale; re-answering removes it, and reset clears current waivers.
 `check --strict` performs the same checks and additionally fails on waivers,
 listing them instead of accepting a documented violation.
 
@@ -268,11 +280,11 @@ Unanswered rules show `Verdict: unanswered` without sealed fields. Recorded
 context and context errors stay in their rule's block. Waivers and their reasons
 have a separate section, with stale waivers labeled. Separators, labels and
 spacing preserve the grouping in redirected output, which has no ANSI colors.
-`report --json` includes `status`, `run_key`, `diff`, `entries` and `waivers`.
-Reporting a blocked run succeeds; a report with status `failed` can contain
-review findings, unanswered questions or other blockers. A successful report
-command does not prove the review is complete or the code passes. Use `check`
-when the code must pass before you're done.
+`report --json` includes scope metadata, `status`, `diff`, `entries`, `waivers`
+and `working_tree_dirty`. Reporting a blocked run still exits `0`. On a dirty
+checkout, the report warns that local edits are not covered and sets overall
+status to `failed`, while keeping committed counts and verdicts for `HEAD`.
+Use `check`, not `report`, to gate hand-over.
 
 | Exit | Meaning |
 |---|---|
@@ -288,7 +300,17 @@ dresscode diff --numstat
 dresscode diff --json
 ```
 
-By default, the scope is the merge base of `HEAD` and the resolved target compared with the **working tree**, plus untracked, non-ignored files as additions. It includes committed, staged and unstaged changes together, not just the index or last commit. Commits added to the base branch after your branch split are not part of the review. Commands work from any subdirectory and report paths relative to the repository root. Inspecting a diff does not write repository files or state.
+By default, DressCode compares the full `HEAD` commit with the merge base of
+`HEAD` and the resolved target. The diff is cumulative; commits added to the
+base branch after your branch split are not part of it. Commands work from any
+subdirectory and report paths relative to the repository root. Inspecting a diff
+does not write repository files, the index or review state.
+
+`diff`, `list`, `answer`, `waive` and `check` require a clean repository.
+Staged, unstaged and non-ignored untracked paths cause exit `2`, even in excluded
+paths or outside your current directory. Commit intended changes or otherwise
+clean the tree before review. Ignored paths do not block it. Configuration
+commands, `trust`, `reset` and `report` remain available while dirty.
 
 Base resolution uses the first available candidate:
 
@@ -333,12 +355,14 @@ default merge base. Context subprocesses inherit the parent's already resolved
 SHA; an explicit child ref can supply auxiliary evidence without changing the
 parent scope. Inspection never changes the selector for later invocations.
 Equivalent selectors share a run only when their baseline SHAs match. Different
-baselines keep separate answers, history, context and waivers even if content
-fingerprints match. Reset clears only the selected run; counters remain shared.
+baselines keep separate answers, history, context and waivers even at the same
+`head_commit`. Reset clears only the selected run; counters remain shared.
 
 ## Exclusions
 
-`diff.exclude` is a list of Git pathspecs, applied to both tracked and untracked files, listing and counts. An explicit list **replaces** the defaults; `exclude = []` includes everything in scope. For example:
+`diff.exclude` is a list of Git pathspecs applied to committed paths and counts.
+An explicit list **replaces** the defaults; `exclude = []` includes everything
+in the diff. Exclusions do not relax the clean-tree requirement. For example:
 
 ```toml
 [diff]
@@ -354,9 +378,11 @@ The default pathspecs are:
 | Snapshots | `:(glob)**/snapshots/**`, `:(glob)**/__snapshots__/**` |
 | Cassettes and fixtures | `:(glob)**/cassettes/**`, `:(glob)**/fixtures/**` |
 
-## Output and fingerprints
+## Output and commit metadata
 
-Text output lists added lines, removed lines and each path, followed by totals. `--numstat` omits the column header and sends the base description to stderr, leaving tab-separated rows on stdout with totals last:
+Text output lists added lines, removed lines and each path, followed by totals.
+`--numstat` omits the column header and sends the commit descriptions to stderr,
+leaving tab-separated rows on stdout with totals last:
 
 ```text
 2       0       src/new.py
@@ -365,19 +391,23 @@ Text output lists added lines, removed lines and each path, followed by totals. 
 
 Binary files use `-` for both counts and do not contribute to line totals. Paths containing tabs, newlines, quotes or backslashes are JSON-quoted so each file stays on one output line. Renames are shown as a deletion plus an addition, so moving unchanged content into scope still counts its added lines. Counts never subtract deletions from additions, and DressCode has no built-in size threshold.
 
-`--json` emits one document with `run_key`, `base_commit`, `fingerprint`, `files` (`path`, `added`, `removed`) and `totals` (`added`, `removed`). Binary file counts are `null`. JSON takes precedence if combined with `--numstat`; successful output has no stderr text. An empty diff succeeds with an empty file list and zero totals.
-
-The SHA-256 fingerprint covers scoped paths, baseline blobs, file modes and current content (symlinks use the link text, not the target). It stays stable across repeated reads and excluded edits. Staging or committing unchanged scoped content also preserves it when the merge base is unchanged. Removing a path from the index alone does not change the result, including when `core.filemode=false` ignores filesystem executable-bit changes. If re-adding the file records a different Git executable mode, that is a scoped change and the fingerprint changes. A scoped content edit changes it even if the line counts stay the same. This is the value used to bind review answers to the reviewed changes.
-
-An untracked nested Git repository exits `2` with a named error rather than being silently skipped. Add it as a submodule or explicitly exclude its path with `diff.exclude`.
+`--json` emits `run_key`, `base_commit`, `head_commit`, `files` (`path`, `added`,
+`removed`) and `totals` (`added`, `removed`). Binary file counts are `null`.
+JSON takes precedence over `--numstat`; successful JSON leaves stderr empty.
+An empty diff returns an empty file list and zero totals. Mode-only changes are
+listed with zero line changes. Symlink counts compare link text, not targets.
 
 ## Submodules
 
-Clean submodules are reviewed as Gitlink commit-ID changes only. Their internal file diffs are not expanded into the listing, line counts or fingerprint. Staging or committing an unchanged parent pointer preserves its fingerprint, regardless of Git’s submodule display setting.
+The committed diff lists submodule Gitlink changes as pointer updates, whether or
+not the submodule is initialized. It does not expand internal files or use Git's
+submodule display setting.
 
-A non-excluded, initialized submodule with staged edits, unstaged edits or non-ignored untracked files makes `diff` exit `2` without producing a diff or fingerprint. Dirty nested submodules also block it; Git settings that hide submodule changes do not bypass this check. The error names the submodule and explains the remedies: commit changes inside it and update the parent pointer, or explicitly exclude the submodule path with `diff.exclude`. Ignored files alone do not block inspection.
-
-With `--json`, this is a single `{"status": "error", "error": "..."}` document, not a successful result. DressCode does not modify files, reset submodules, automatically exclude them or block Git commits.
+Guarded review commands also reject local pointer changes and initialized
+submodules with staged, unstaged or non-ignored untracked changes, including
+in nested submodules. Exclusions and Git settings that hide changes do not
+bypass the check. Clean the submodule and commit any intended pointer update in
+the parent. DressCode does not modify submodules or block Git commits.
 
 ## Development
 

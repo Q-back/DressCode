@@ -30,7 +30,7 @@ def test_runs_are_isolated_by_branch_and_restored_on_return(
     entry = load(repository).entries[0]
     run = RunStore(resolve_scope(load(repository)))
     assert json.loads(run.run_key)[1:3] == [repository.identity, "feature/test"]
-    run.record(entry, "yes", "Reused the factory", "fingerprint")
+    run.record(entry, "yes", "Reused the factory")
     first_path = run.path
 
     git(git_repo, "switch", "main")
@@ -78,7 +78,7 @@ def test_concurrent_answers_do_not_overwrite_each_other(
     with ThreadPoolExecutor(max_workers=len(entries)) as workers:
         list(
             workers.map(
-                lambda entry: store.record(entry, "yes", "Reviewed", "fingerprint"),
+                lambda entry: store.record(entry, "yes", "Reviewed"),
                 entries,
             )
         )

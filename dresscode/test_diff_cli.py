@@ -5,12 +5,12 @@ import pytest
 from typer.testing import CliRunner
 
 from dresscode.cli import app
-from dresscode.test_diff import git
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 
 
-def test_diff_json_loads_config_and_preserves_fingerprint_across_commit(
+def test_diff_json_loads_config_and_updates_head_after_empty_commit(
     git_repo: Path, xdg_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     (xdg_home / "config/dresscode").mkdir()
@@ -20,6 +20,7 @@ def test_diff_json_loads_config_and_preserves_fingerprint_across_commit(
     (git_repo / "new.py").write_text("new\n")
     (git_repo / "uv.lock").write_text("included with explicit exclusions\n")
     (git_repo / "ignored.skip").write_text("excluded\n")
+    commit_all(git_repo)
     (git_repo / "subdir").mkdir()
     monkeypatch.chdir(git_repo / "subdir")
     before = git(git_repo, "status", "--porcelain")
@@ -31,21 +32,24 @@ def test_diff_json_loads_config_and_preserves_fingerprint_across_commit(
     assert response == {
         "run_key": response["run_key"],
         "base_commit": git(git_repo, "rev-parse", "main"),
-        "fingerprint": response["fingerprint"],
+        "head_commit": git(git_repo, "rev-parse", "HEAD"),
         "files": [
             {"path": "new.py", "added": 1, "removed": 0},
             {"path": "uv.lock", "added": 1, "removed": 0},
         ],
         "totals": {"added": 2, "removed": 0},
     }
-    assert len(response["fingerprint"]) == 64
     assert git(git_repo, "status", "--porcelain") == before
     assert list((xdg_home / "state").iterdir()) == []
-    git(git_repo, "add", ".")
-    git(git_repo, "commit", "--message", "Reviewed change")
+    git(git_repo, "commit", "--allow-empty", "-m", "Same content, different commit")
     committed = runner.invoke(app, ["diff", "--json", "--numstat"])
-    assert committed.exit_code == 0
-    assert json.loads(committed.stdout) == response
+    assert committed.exit_code == 0, committed.output
+    assert committed.stderr == ""
+    assert json.loads(committed.stdout) == {
+        **response,
+        "head_commit": git(git_repo, "rev-parse", "HEAD"),
+    }
+    assert json.loads(committed.stdout)["head_commit"] != response["head_commit"]
 
 
 @pytest.mark.parametrize("numstat", [False, True])
@@ -54,11 +58,14 @@ def test_diff_text_reports_base_counts_and_totals(
 ) -> None:
     monkeypatch.chdir(git_repo)
     (git_repo / "new.py").write_text("one\ntwo\n")
+    commit_all(git_repo)
     result = runner.invoke(app, ["diff", *(["--numstat"] if numstat else [])])
     assert result.exit_code == 0, result.output
     assert "2\t0\tnew.py" in result.stdout
     assert result.stdout.splitlines()[-1] == "2\t0\tTOTAL"
-    assert "Base: " in (result.stderr if numstat else result.stdout)
+    metadata = result.stderr if numstat else result.stdout
+    assert f"Base: {git(git_repo, 'rev-parse', 'main')}" in metadata
+    assert f"HEAD: {git(git_repo, 'rev-parse', 'HEAD')}" in metadata
     assert "\x1b" not in result.output
     if numstat:
         assert result.stdout.splitlines() == ["2\t0\tnew.py", "2\t0\tTOTAL"]
@@ -70,6 +77,7 @@ def test_binary_numstat_escapes_unusual_paths(
     monkeypatch.chdir(git_repo)
     path = "tab\tline\n.bin"
     (git_repo / path).write_bytes(b"\0binary")
+    commit_all(git_repo)
     result = runner.invoke(app, ["diff", "--numstat"])
     assert result.exit_code == 0, result.output
     assert result.stdout.splitlines() == [f"-\t-\t{json.dumps(path)}", "0\t0\tTOTAL"]
@@ -126,8 +134,8 @@ def test_untracked_nested_repository_has_an_actionable_error(
     config.mkdir()
     (config / "config.toml").write_text('[diff]\nexclude = ["nested"]\n')
     excluded = runner.invoke(app, ["diff", "--json"])
-    assert excluded.exit_code == 0, excluded.output
-    assert json.loads(excluded.stdout)["files"] == []
+    assert excluded.exit_code == 2, excluded.output
+    assert "nested/" in json.loads(excluded.stdout)["error"]
 
 
 @pytest.mark.parametrize(
@@ -138,6 +146,7 @@ def test_invalid_diff_configuration_returns_json_error(
 ) -> None:
     monkeypatch.chdir(git_repo)
     (git_repo / ".dresscode.toml").write_text(config)
+    commit_all(git_repo)
     result = runner.invoke(app, ["diff", "--json"])
     assert result.exit_code == 2
     assert json.loads(result.stdout)["status"] == "error"

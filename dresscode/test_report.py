@@ -16,7 +16,13 @@ from dresscode import report
 def summary() -> dict[str, Any]:
     return {
         "status": "failed",
-        "diff": {"added": 12, "removed": 3, "base_commit": "a" * 40},
+        "working_tree_dirty": False,
+        "diff": {
+            "added": 12,
+            "removed": 3,
+            "base_commit": "a" * 40,
+            "head_commit": "b" * 40,
+        },
         "entries": [],
         "waivers": [],
     }
@@ -88,7 +94,12 @@ def test_report_blocks_preserve_fields_and_wrapping(
     assert "Reveal: Keep [demo]" in first
     # Remove only layout whitespace, retaining every character of long values.
     compact = "".join(rendered.split())
-    for value in (evidence, summary["diff"]["base_commit"], "Retain all names."):
+    for value in (
+        evidence,
+        summary["diff"]["base_commit"],
+        summary["diff"]["head_commit"],
+        "Retain all names.",
+    ):
         assert "".join(value.split()) in compact
     assert second.startswith("unique-fruit-names [unanswered]")
     assert "Verdict: unanswered" in second

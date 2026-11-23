@@ -1,11 +1,8 @@
-"""Scoped changes and their content fingerprints."""
+"""Baseline selection and committed diff inspection."""
 
-import hashlib
 import json
 import os
-import stat
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,6 +26,7 @@ DIFF_OPTIONS = (
     "--no-textconv",
     "--no-renames",
     "--ignore-submodules=none",
+    "--submodule=short",
 )
 
 
@@ -43,17 +41,24 @@ class FileChange:
 class ResolvedScope:
     repository: Repository
     base_commit: str
+    head_commit: str
     run_key: str
 
     def metadata(self) -> dict[str, str]:
-        return {"base_commit": self.base_commit, "run_key": self.run_key}
+        return {
+            "base_commit": self.base_commit,
+            "head_commit": self.head_commit,
+            "run_key": self.run_key,
+        }
+
+    def description(self) -> str:
+        return f"Base: {self.base_commit}\nHEAD: {self.head_commit}"
 
 
 @dataclass(frozen=True)
 class ScopedDiff:
     scope: ResolvedScope
     files: tuple[FileChange, ...]
-    fingerprint: str
 
     @property
     def base_commit(self) -> str:
@@ -73,29 +78,21 @@ class DiffError(ValueError):
 
 
 def collect(config: Configuration, scope: ResolvedScope | None = None) -> ScopedDiff:
-    root = config.repository.root
-    pathspecs = _pathspecs(config)
     scope = scope if scope is not None else resolve_scope(config)
-    _reject_dirty_submodules(root, pathspecs)
-    arguments = ("diff", scope.base_commit, *DIFF_OPTIONS)
-    counts = _git(root, *arguments, "--numstat", "-z", "--", *pathspecs)
-    files = [_parse_numstat(record) for record in counts.split(b"\0") if record]
-    raw = _git(root, *arguments, "--raw", "--no-abbrev", "-z", "--", *pathspecs)
-    fields = raw.split(b"\0")[:-1]
-    metadata = {}
-    for header, path in zip(fields[::2], fields[1::2], strict=True):
-        old_mode, new_mode, old_oid, _, _ = header[1:].decode().split()
-        metadata[os.fsdecode(path)] = (old_mode, old_oid, new_mode)
-    try:
-        _include_untracked(root, pathspecs, files, metadata)
-        fingerprint = _fingerprint(root, metadata, arguments)
-    except OSError as error:
-        raise DiffError(f"Cannot read scoped content at {root}: {error}") from error
-    return ScopedDiff(
-        scope,
-        tuple(sorted(files, key=lambda file: file.path)),
-        fingerprint,
+    counts = _git(
+        config.repository.root,
+        "diff",
+        scope.base_commit,
+        scope.head_commit,
+        *DIFF_OPTIONS,
+        "--numstat",
+        "-z",
+        "--",
+        *_pathspecs(config),
+        env=os.environ | {"GIT_ATTR_SOURCE": scope.head_commit},
     )
+    files = [_parse_numstat(record) for record in counts.split(b"\0") if record]
+    return ScopedDiff(scope, tuple(sorted(files, key=lambda file: file.path)))
 
 
 def resolve_scope(config: Configuration, reference: str | None = None) -> ResolvedScope:
@@ -103,11 +100,14 @@ def resolve_scope(config: Configuration, reference: str | None = None) -> Resolv
     selected = (
         reference if reference is not None else os.environ.get("DRESSCODE_BASE_COMMIT")
     )
+    head_commit = _resolve_commit(root, "HEAD")
     if selected is not None:
         baseline = _resolve_commit(root, selected)
     else:
-        _, target = resolve_base(root, config.settings.get("merge_base_with"))
-        baseline = _git(root, "merge-base", "HEAD", target).decode().strip()
+        _, target = resolve_base(
+            root, config.settings.get("merge_base_with"), head_commit=head_commit
+        )
+        baseline = _git(root, "merge-base", head_commit, target).decode().strip()
     branch = (
         _git(root, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1))
         .decode()
@@ -115,14 +115,15 @@ def resolve_scope(config: Configuration, reference: str | None = None) -> Resolv
     )
     if not branch:
         branch = (
-            "detached-" + _git(root, "rev-parse", "--short", "HEAD").decode().strip()
+            "detached-"
+            + _git(root, "rev-parse", "--short", head_commit).decode().strip()
         )
     key = json.dumps(
-        ["v2", config.repository.identity, branch, baseline],
+        ["v3", config.repository.identity, branch, baseline],
         separators=(",", ":"),
         ensure_ascii=True,
     )
-    return ResolvedScope(config.repository, baseline, key)
+    return ResolvedScope(config.repository, baseline, head_commit, key)
 
 
 def _resolve_commit(root: Path, reference: str) -> str:
@@ -146,7 +147,9 @@ def _resolve_commit(root: Path, reference: str) -> str:
     return commit
 
 
-def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
+def resolve_base(
+    root: Path, configured: object = None, *, head_commit: str = "HEAD"
+) -> tuple[str, str]:
     if configured is not None and (not isinstance(configured, str) or not configured):
         raise DiffError("merge_base_with must be a non-empty string")
     candidates = (
@@ -177,115 +180,56 @@ def resolve_base(root: Path, configured: object = None) -> tuple[str, str]:
     if configured is not None:
         raise DiffError(f"merge_base_with does not resolve to a commit: {configured}")
     root_commit = (
-        _git(root, "rev-list", "--max-parents=0", "HEAD").decode().splitlines()[0]
+        _git(root, "rev-list", "--max-parents=0", head_commit).decode().splitlines()[0]
     )
     return root_commit, root_commit
 
 
-def _reject_dirty_submodules(
-    root: Path, pathspecs: tuple[str, ...], enclosing: str | None = None
-) -> None:
-    entries = _git(root, "ls-files", "--stage", "-z", "--", *pathspecs)
-    for record in filter(None, entries.split(b"\0")):
-        header, name = record.split(b"\t", 1)
-        if not header.startswith(b"160000 "):
+def dirty_paths(root: Path) -> set[str]:
+    status = _git(
+        root,
+        "--no-optional-locks",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "--no-renames",
+        "--untracked-files=all",
+        "--ignore-submodules=none",
+    )
+    paths = {os.fsdecode(record[3:]) for record in status.split(b"\0") if record}
+    # Parent status can miss dirtiness hidden by settings deeper in submodules.
+    entries = _git(root, "ls-files", "--stage", "-z")
+    for record in entries.split(b"\0"):
+        if not record.startswith(b"160000 "):
             continue
-        path = os.fsdecode(name)
+        path = os.fsdecode(record.split(b"\t", 1)[1])
         submodule = root / path
-        if submodule.is_symlink() or not (submodule / ".git").exists():
-            continue
-        if _git(
-            submodule,
-            "--no-optional-locks",
-            "status",
-            "--porcelain=v1",
-            "--untracked-files=all",
-            "--ignore-submodules=none",
-        ):
-            raise DiffError(
-                f"Cannot fingerprint dirty submodule {enclosing or path!r}. "
-                "Commit changes inside it and update the parent pointer, "
-                "or exclude its path with diff.exclude."
-            )
-        _reject_dirty_submodules(submodule, (), enclosing or path)
-
-
-def _include_untracked(
-    root: Path,
-    pathspecs: tuple[str, ...],
-    files: list[FileChange],
-    metadata: dict[str, tuple[str, str, str]],
-) -> None:
-    names = _git(
-        root, "ls-files", "--others", "--exclude-standard", "-z", "--", *pathspecs
-    )
-    executable_bits = (
-        _git(
-            root, "config", "--bool", "--get", "core.filemode", allowed_codes=(0, 1)
-        ).strip()
-        != b"false"
-    )
-    for name in filter(None, names.split(b"\0")):
-        path = os.fsdecode(name)
-        mode = (root / path).lstat().st_mode
-        if stat.S_ISDIR(mode):
-            raise DiffError(
-                f"Untracked nested Git repository {path!r}: add it as a submodule "
-                "or exclude it with diff.exclude"
-            )
-        git_mode = (
-            "120000"
-            if stat.S_ISLNK(mode)
-            else "100755"
-            if executable_bits and mode & stat.S_IXUSR
-            else "100644"
-        )
-        old_mode, old_oid, _ = metadata.get(path, ("000000", "", "000000"))
-        comparison_mode = int(old_mode, 8) & 0o777
         if (
-            not executable_bits
-            and old_mode in ("100644", "100755")
-            and stat.S_ISREG(mode)
+            path not in paths
+            and not submodule.is_symlink()
+            and (submodule / ".git").exists()
+            and dirty_paths(submodule)
         ):
-            git_mode = old_mode
-            comparison_mode = 0o755 if mode & stat.S_IXUSR else 0o644
-        counts = _untracked_numstat(root, path, old_mode, old_oid, comparison_mode)
-        if path in metadata:
-            files[:] = [file for file in files if file.path != path]
-        if counts:
-            metadata[path] = (old_mode, old_oid, git_mode)
-            added, removed, _ = counts.split(b"\t", 2)
-            files.append(FileChange(path, _count(added), _count(removed)))
-        else:
-            metadata.pop(path, None)
+            paths.add(path)
+    return paths
 
 
-def _untracked_numstat(
-    root: Path, path: str, old_mode: str, old_oid: str, comparison_mode: int
-) -> bytes:
-    with tempfile.TemporaryDirectory(prefix="dresscode-baseline-") as temporary:
-        before = os.devnull
-        if old_mode != "000000":
-            baseline = Path(temporary) / Path(path).name
-            content = _git(root, "cat-file", "blob", old_oid)
-            if old_mode == "120000":
-                baseline.symlink_to(os.fsdecode(content))
-            else:
-                baseline.write_bytes(content)
-                baseline.chmod(comparison_mode)
-            before = str(baseline)
-        return _git(
-            root,
-            "diff",
-            "--no-index",
-            *DIFF_OPTIONS,
-            "--numstat",
-            "-z",
-            "--",
-            before,
-            path,
-            allowed_codes=(0, 1),
+def require_clean(root: Path) -> None:
+    paths = dirty_paths(root)
+    if paths:
+        names = ", ".join(repr(path) for path in sorted(paths))
+        raise DiffError(
+            f"Working tree is dirty: {names}. Commit intended changes or remove local "
+            "edits before review. For submodules, clean their working trees and commit "
+            "any parent pointer updates. diff.exclude does not bypass this check."
         )
+
+
+def require_current_snapshot(scope: ResolvedScope) -> None:
+    root = scope.repository.root
+    if _resolve_commit(root, "HEAD") != scope.head_commit:
+        raise DiffError(f"HEAD no longer matches reviewed commit {scope.head_commit}.")
+    require_clean(root)
 
 
 def _pathspecs(config: Configuration) -> tuple[str, ...]:
@@ -320,43 +264,15 @@ def _count(value: bytes) -> int | None:
     return None if value == b"-" else int(value)
 
 
-def _fingerprint(
-    root: Path, metadata: dict[str, tuple[str, str, str]], arguments: tuple[str, ...]
-) -> str:
-    records = []
-    for path, (old_mode, old_oid, new_mode) in sorted(metadata.items()):
-        if new_mode == "000000":
-            content = b""
-        elif new_mode == "120000":
-            content = os.fsencode(os.readlink(root / path))
-        elif new_mode == "160000":
-            content = _git(
-                root,
-                *arguments,
-                "--binary",
-                "--submodule=short",
-                "--no-color",
-                "--",
-                f":(literal){path}",
-            )
-        else:
-            content = (root / path).read_bytes()
-        records.append(
-            (
-                path,
-                old_mode,
-                old_oid if old_mode != "000000" else "",
-                new_mode,
-                hashlib.sha256(content).hexdigest(),
-            )
-        )
-    return hashlib.sha256(json.dumps(records, ensure_ascii=True).encode()).hexdigest()
-
-
-def _git(root: Path, *arguments: str, allowed_codes: tuple[int, ...] = (0,)) -> bytes:
+def _git(
+    root: Path,
+    *arguments: str,
+    allowed_codes: tuple[int, ...] = (0,),
+    env: dict[str, str] | None = None,
+) -> bytes:
     try:
         result = subprocess.run(
-            ["git", *arguments], cwd=root, capture_output=True, check=False
+            ["git", *arguments], cwd=root, env=env, capture_output=True, check=False
         )
     except OSError as error:
         raise DiffError(f"Cannot run Git at {root}: {error}") from error

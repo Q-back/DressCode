@@ -9,7 +9,7 @@ description: Review code with DressCode questions, report findings, check code c
 
 DressCode turns recurring agent mistakes into yes/no review questions. Expected
 answers and explanations stay sealed until a verdict is recorded. The CLI tracks
-answers against the current diff; it neither launches reviewers nor proves their
+answers against the reviewed commit; it neither launches reviewers nor proves their
 independence. Use it for project-specific judgment that tests and linters miss,
 not as a replacement for those checks.
 
@@ -24,11 +24,12 @@ are seeded; add rules as below. Use `dresscode <command> --help` for flags.
 
 Review code, record answers and report findings. Do not change the reviewed code
 or add waivers. The calling workflow handles fixes and accepted exceptions.
+For code changes: test, commit, request fresh review, then check. Test and
+commit fixes before re-review.
 
-1. Inspect `dresscode diff --json` for the review base and scope.
-   This reports paths and counts, not a code patch. Review the full cumulative
-   changes: committed, staged, unstaged and non-ignored untracked files, subject
-   to configured exclusions.
+1. Inspect `dresscode diff --json` for `base_commit` and `head_commit`.
+   This reports paths and counts, not a code patch. Review the cumulative
+   committed diff between those SHAs, subject to configured exclusions.
 2. Run `dresscode list --json`. Give its questions, context evidence and the
    actual cumulative code diff to a fresh-context reviewer who has not seen the
    implementation transcript. Do not give it configuration, expected answers or
@@ -40,7 +41,9 @@ or add waivers. The calling workflow handles fixes and accepted exceptions.
 4. Show `dresscode report`. Every question needs an answer with evidence.
    Surface unanswered questions, stale answers, context failures and command
    errors; do not treat them as completed checks. The report command can succeed
-   with status `failed`; that does not mean the code passes.
+   with status `failed`; that does not mean the code passes. On a dirty checkout,
+   it shows the committed review and warns that local edits are not covered
+   (`working_tree_dirty` in JSON).
 
 - **Changing code?** Run `dresscode check` and include its result in the report.
   If it fails, report the blockers to the caller.
@@ -49,25 +52,30 @@ or add waivers. The calling workflow handles fixes and accepted exceptions.
 - **Only reviewing code?** Do not run `dresscode check`. Report the findings and
   stop, even if violations remain.
 
-Answers and waivers become stale when the reviewed diff changes. An empty rule
-list passes the gate but reviews nothing.
+`diff`, `list`, `answer`, `waive` and `check` require a clean checkout. Ignored
+files are fine; excluded paths still count when checking for local changes.
+A different `HEAD` makes answers and waivers stale, even after an empty commit,
+a message-only amendment or an excluded-only commit. A clean checkout with no
+rules passes the gate but reviews nothing.
 
 The default baseline is the merge base with configured `merge_base_with`,
 otherwise `origin/HEAD`, local `main`, local `master`, then the root commit.
-Invalid configured targets fail. Successful review JSON includes `run_key` and
-`base_commit`; diff JSON uses `base_commit` as its only baseline field. Text
-identifies the baseline. Runs are separate per repository, branch and baseline;
-a changed baseline needs a fresh review even if its content fingerprint matches.
+Invalid configured targets fail. Successful review JSON includes `run_key`,
+`base_commit` and `head_commit` (replacing `fingerprint`). Text identifies both
+commits. Runs are separate per repository, branch and baseline.
 Context subprocesses inherit the pinned SHA through `DRESSCODE_BASE_COMMIT`.
 
-Legacy run files remain untouched and cannot approve new baseline-keyed reviews.
-Review again after upgrading; counters, retirements and trust remain intact.
-After downgrading, run the legacy `dresscode reset` in each repository/branch
-before relying on its gate, then review again.
+Legacy run files stay untouched and cannot approve commit-bound reviews.
+Review again after upgrading; counters, retirements and trust stay intact.
+After downgrading, run `dresscode reset` with the older CLI for each relevant
+repository, branch and baseline (just repository and branch for versions
+without baseline support). Review again before relying on its gate.
 
 Context commands run during `list`. Inspect repository-local commands before
 `dresscode trust`; they run with your permissions, not in a read-only sandbox.
 Untrusted, failed or timed-out context blocks the gate even if listing succeeds.
+If commands leave local edits or move `HEAD`, `list` fails and saves none of that
+invocation's context.
 
 ## Rules
 
@@ -84,7 +92,8 @@ dresscode add shared-builder \
   --reveal "Prefer the shared builder over duplicating test setup."
 ```
 
-`add` writes shared repository config by default. Use `--layer private` for
+`add` writes shared repository config by default. Commit that file before review.
+Use `--layer private` for
 personal rules in this repository or `--layer global` for cross-project defaults.
 Higher layers override by ID: global < repo < private.
 
@@ -127,4 +136,4 @@ merge base. Explicit refs bypass the default target. Unqualified nested context
 commands inherit the parent's SHA; explicit child refs are auxiliary evidence.
 Inspection never selects a scope for later invocations. Equivalent baselines
 share runs; different baselines isolate answers, history, context and waivers,
-even with equal fingerprints. Reset clears only the selected run.
+even at the same `head_commit`. Reset clears only the selected run.

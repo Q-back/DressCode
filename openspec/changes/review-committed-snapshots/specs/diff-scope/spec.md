@@ -83,7 +83,7 @@ The system SHALL exclude committed paths matching the configured `diff.exclude` 
 
 ### Requirement: Diff command
 
-The system SHALL provide `dresscode diff [REF]` with file counts, totals, `--numstat`, `--json` and context-command support. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. Output SHALL identify the actual baseline and reviewed commit. Numstat descriptions SHALL remain on stderr; JSON SHALL take precedence and leave stderr empty. Diff JSON SHALL contain `run_key`, `base_commit`, `head_commit`, files and totals. `base_commit` SHALL be the only baseline field. `head_commit` SHALL be the full resolved reviewed commit ID. Diff JSON SHALL NOT contain `fingerprint` or `merge_base`.
+`dresscode diff [REF]` SHALL show file counts, totals, the baseline and the full reviewed commit. `REF` SHALL be shorthand for `--base REF`; supplying both SHALL exit `2`. `--numstat` SHALL send descriptions to stderr. `--json` SHALL take precedence and leave stderr empty. Diff JSON SHALL contain `run_key`, `base_commit` (the only baseline field), `head_commit`, files and totals.
 
 #### Scenario: Numstat form
 - **WHEN** `dresscode diff --numstat` runs

@@ -23,6 +23,7 @@ class GateDecision(TypedDict):
     status: str
     entries: list[EntryDecision]
     base_commit: str
+    head_commit: str
     run_key: str
 
 
@@ -36,9 +37,9 @@ def review(
     for entry in config.entries:
         if entry.id in retired:
             continue
-        status = entry_state(entry, state, scoped.fingerprint)
+        status = entry_state(entry, state, scoped.scope.head_commit)
         context = (
-            required_context(config, entry, state, scoped.fingerprint, scoped.scope)
+            required_context(config, entry, state, scoped.scope)
             if entry.context is not None
             else None
         )
@@ -71,17 +72,18 @@ def review(
             status=status,
             entries=decisions,
             base_commit=scoped.base_commit,
+            head_commit=scoped.scope.head_commit,
             run_key=scoped.scope.run_key,
         ),
     )
 
 
-def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:
+def entry_state(entry: Entry, state: RunState, head_commit: str) -> str:
     record = state["verdicts"].get(entry.id)
     if record is None:
         return "unanswered"
     if (
-        record["fingerprint"] != fingerprint
+        record["head_commit"] != head_commit
         or record.get("context_command") != entry.context
     ):
         return "stale"
@@ -92,7 +94,7 @@ def entry_state(entry: Entry, state: RunState, fingerprint: str) -> str:
         return "passed"
     waiver = state["waivers"].get(entry.id)
     if waiver is not None:
-        return "waived" if waiver["fingerprint"] == fingerprint else "stale"
+        return "waived" if waiver["head_commit"] == head_commit else "stale"
     return "violated"
 
 
