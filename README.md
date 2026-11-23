@@ -92,7 +92,7 @@ arranging review. DressCode compares the selected baseline with `HEAD`:
 | Get questions | `dresscode list --json` | The reviewer gets the questions and any configured context evidence. |
 | Record each verdict | `dresscode answer <id> --yes --evidence "<findings>"` | The reviewer records its judgment; use `--no` or `--n-a` where appropriate. |
 | Before hand-over | `dresscode check` | Your agent requires current passing answers. If fixes are needed, it tests and commits before re-review. |
-| Show the result | `dresscode report` | Your agent reports the verdicts and evidence. It can still inspect a committed review when local edits block the gate. |
+| Show the result | `dresscode report` | Your agent reports the verdicts and evidence. Local source edits do not block this command, but local edits to repository rules do. |
 
 `diff`, `list`, `answer`, `waive`, and `check` require a clean checkout. Ignored
 files do not block review, but `diff.exclude` does not hide local changes.

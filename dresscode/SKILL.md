@@ -43,7 +43,7 @@ commit fixes before re-review.
    errors; do not treat them as completed checks. The report command can succeed
    with status `failed`; that does not mean the code passes. On a dirty checkout,
    it shows the committed review and warns that local edits are not covered
-   (`working_tree_dirty` in JSON).
+   (`working_tree_dirty` in JSON). Uncommitted repository rule changes block reporting.
 
 - **Changing code?** Run `dresscode check` and include its result in the report.
   If it fails, report the blockers to the caller.

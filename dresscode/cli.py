@@ -415,15 +415,29 @@ def waive(
     )
 
 
-@app.command("report", help="Show the committed review, even with local edits.")
+@app.command(
+    "report", help="Show the committed review. Requires clean repository rules."
+)
 def report(json_output: JsonOutput = False, base: BaseSelection = None) -> None:
-    config = configuration(json_output)
+    repo = repository(json_output)
     try:
-        working_tree_dirty = bool(dirty_paths(config.repository.root))
+        paths = dirty_paths(repo.root)
+        dirty_config = sorted(
+            path
+            for path in paths
+            if re.fullmatch(r"\.dresscode(?:\.toml|/[^/]*\.toml)", path)
+        )
+        if dirty_config:
+            names = ", ".join(map(repr, dirty_config))
+            raise DiffError(
+                f"Repository configuration is dirty: {names}. "
+                "Commit or undo these changes before reporting."
+            )
+        config = load(repo)
         scoped, state, decision = review(config, scope=resolve_scope(config, base))
-    except (DiffError, RunError, StoreError) as error:
+    except (ConfigurationError, DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
-    summary = summarize(config, scoped, state, decision, working_tree_dirty)
+    summary = summarize(config, scoped, state, decision, bool(paths))
     if json_output:
         typer.echo(json.dumps(summary))
     else:

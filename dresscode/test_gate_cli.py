@@ -296,6 +296,42 @@ def test_dirty_report_keeps_committed_counts_and_evidence(git_repo: Path) -> Non
     assert "\x1b[" not in plain.stdout
 
 
+@pytest.mark.parametrize(
+    ("path", "change"),
+    [
+        (".dresscode.toml", "unstaged"),
+        (".dresscode/rules.toml", "staged"),
+        (".dresscode/new.toml", "untracked"),
+        (".dresscode/rules.toml", "deleted"),
+    ],
+)
+def test_report_rejects_dirty_repository_config(
+    git_repo: Path, path: str, change: str
+) -> None:
+    rules = git_repo / path
+    if path.startswith(".dresscode/"):
+        rules.parent.mkdir()
+        (git_repo / ".dresscode.toml").rename(rules.parent / "rules.toml")
+        commit_all(git_repo)
+    record()
+
+    if change == "deleted":
+        rules.unlink()
+    else:
+        rules.write_text("broken = [")
+        if change == "staged":
+            git(git_repo, "add", path)
+
+    result = invoke("report", "--json")
+    assert result.exit_code == 2, result.output
+    assert result.stderr == ""
+    assert json.loads(result.stdout) == {
+        "status": "error",
+        "error": f"Repository configuration is dirty: {path!r}. "
+        "Commit or undo these changes before reporting.",
+    }
+
+
 def test_report_marks_stale_waivers(git_repo: Path) -> None:
     record("--no")
     assert invoke("waive", "factory", "--reason", "Accepted").exit_code == 0

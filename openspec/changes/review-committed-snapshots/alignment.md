@@ -21,16 +21,16 @@
   - Include staged, unstaged and non-ignored untracked paths throughout the repository.
   - Excluded paths and dirty submodules still block review.
   - Ignored files do not block review.
-  - Configuration, `trust`, `reset` and reporting remain usable when dirty.
+  - Configuration commands, `trust` and `reset` remain usable when dirty.
 - **[Context command safety](specs/context-commands/spec.md#requirement-context-collection-stays-on-the-reviewed-commit)** *(new, agent decision)*: `list` can run commands that provide extra context for review questions. If a command leaves uncommitted changes or changes `HEAD`, `list` fails with an error saying that the repository changed, and saves none of the context collected during that run.
   - Recheck the checkout before saving any results from that invocation.
   - Keep previously saved context untouched on rejection.
 
 ### 3. Keep reporting available
 
-- **[Report boundary](specs/verdict-gate/spec.md#requirement-human-report)**: report committed diff counts and recorded evidence even when the working tree is dirty.
+- **[Report boundary](specs/verdict-gate/spec.md#requirement-human-report)**: report committed diff counts and recorded evidence even when the working tree is dirty, unless repository configuration files have uncommitted changes.
   - Was: report used working-tree counts and fingerprint-based freshness.
-  - Add only commit metadata and a warning that local edits are not covered.
+  - Keep the existing layout. Add commit metadata and a warning that local edits are not covered.
   - Use JSON `working_tree_dirty` and overall status `failed` while dirty *(agent decision)*, as described in the [minimal report adaptation](design.md#5-give-report-the-smallest-necessary-adaptation).
 
 ### 4. Start fresh after upgrade

@@ -46,7 +46,7 @@ A separate inherited head selector is unnecessary: read-only context sees the ex
 
 ### 5. Give report the smallest necessary adaptation
 
-Let `report` call the shared committed collector and verdict evaluation without the clean-tree rejection. Keep its current rule blocks, status vocabulary, evidence, context, reveal, waivers and command exit behavior.
+Let `report` call the shared committed collector and verdict evaluation without the general clean-tree rejection. Before loading configuration, reuse the dirty-path scan to reject changes to `.dresscode.toml` and `.dresscode/*.toml`. This prevents local rule edits from hiding saved evidence or breaking parsing. Global and private layers are unchanged. Keep the current rule blocks, status vocabulary, evidence, context, reveal, waivers and command exit behavior.
 
 Replace fingerprint metadata with `head_commit`, use committed counts, and add one dirty-tree warning plus JSON `working_tree_dirty`. While dirty, retain per-entry freshness relative to the current commit but set the overall report status to `failed`, so the display cannot imply that local edits passed review. A different `HEAD` uses the existing stale presentation. No new report modes or historical snapshot browser are needed.
 

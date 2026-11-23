@@ -284,6 +284,8 @@ spacing preserve the grouping in redirected output, which has no ANSI colors.
 and `working_tree_dirty`. Reporting a blocked run still exits `0`. On a dirty
 checkout, the report warns that local edits are not covered and sets overall
 status to `failed`, while keeping committed counts and verdicts for `HEAD`.
+If Git reports uncommitted changes to `.dresscode.toml` or `.dresscode/*.toml`,
+`report` names the files and exits `2`. Commit or undo those changes first.
 Use `check`, not `report`, to gate hand-over.
 
 | Exit | Meaning |
@@ -310,7 +312,8 @@ does not write repository files, the index or review state.
 Staged, unstaged and non-ignored untracked paths cause exit `2`, even in excluded
 paths or outside your current directory. Commit intended changes or otherwise
 clean the tree before review. Ignored paths do not block it. Configuration
-commands, `trust`, `reset` and `report` remain available while dirty.
+commands, `trust` and `reset` remain available while dirty. `report` also
+remains available unless repository configuration files have local changes.
 
 Base resolution uses the first available candidate:
 

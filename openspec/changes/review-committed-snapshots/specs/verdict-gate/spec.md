@@ -53,7 +53,7 @@ The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry
 
 ### Requirement: Human report
 
-`dresscode report` SHALL show committed diff counts and commit metadata in its colored summary. It SHALL keep separate labeled rule blocks with verdicts, evidence, reveal and context, and a separate waivers section. Rule headings, verdicts and evidence SHALL be more prominent than questions and reveals. Reporting a blocked review SHALL exit `0`. A dirty tree SHALL produce a warning and overall status `failed`, not block reporting.
+`dresscode report` SHALL show committed diff counts and commit metadata in its colored summary. It SHALL keep separate labeled rule blocks with verdicts, evidence, reveal and context, and a separate waivers section. Rule headings, verdicts and evidence SHALL be more prominent than questions and reveals. Reporting a blocked review SHALL exit `0`. Local edits SHALL produce a warning and overall status `failed`, except for uncommitted repository configuration, which SHALL block reporting.
 
 #### Scenario: Report after a green run
 - **WHEN** `dresscode report` runs on a clean green run
@@ -128,8 +128,13 @@ The system SHALL accept `dresscode waive <id> --reason <text>` only for an entry
 - **THEN** the report shows both the question and reveal without a verbosity flag
 - **AND** recorded context output and context errors remain visible when present
 
+#### Scenario: Uncommitted repository configuration blocks reporting
+- **WHEN** `.dresscode.toml` or a direct `.dresscode/*.toml` file is staged, modified, deleted or non-ignored and untracked
+- **THEN** `report` exits `2` before loading configuration and names the affected paths
+- **AND** it tells the user to commit or undo the changes
+
 #### Scenario: Dirty checkout remains inspectable
-- **WHEN** a recorded review exists for the current commit and the working tree has local edits
+- **WHEN** a recorded review exists for the current commit and the working tree has local edits outside the repository configuration
 - **THEN** `report` exits `0`, retains the recorded evidence and per-entry commit freshness, and warns that the edits are not covered
 - **AND** its overall status is `failed`, `working_tree_dirty` is true and its diff counts exclude local edits
 
