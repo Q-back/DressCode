@@ -49,7 +49,7 @@ def summarize(
         **scoped.scope.metadata(),
         "working_tree_dirty": working_tree_dirty,
         "diff": {
-            "base_commit": scoped.base_commit,
+            "base_commit": scoped.scope.base_commit,
             "head_commit": scoped.scope.head_commit,
             "added": scoped.added,
             "removed": scoped.removed,

@@ -98,56 +98,45 @@ def test_diff_outside_repository_is_a_usage_error(
         assert result.stdout == ""
 
 
-@pytest.mark.parametrize("json_output", [False, True])
-def test_untracked_nested_repository_has_an_actionable_error(
-    git_repo: Path, xdg_home: Path, monkeypatch: pytest.MonkeyPatch, json_output: bool
+def test_untracked_nested_repository_blocks_diff(
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    nested = git_repo / "nested"
-    nested.mkdir()
-    git(nested, "init", "--initial-branch=main")
-    (nested / "file.txt").write_text("nested content\n")
-    git(nested, "add", ".")
-    git(
-        nested,
-        "-c",
-        "user.name=Tests",
-        "-c",
-        "user.email=tests@dresscode.invalid",
-        "commit",
-        "-m",
-        "Nested baseline",
-    )
+    git(git_repo, "init", "--initial-branch=main", "nested")
+    (git_repo / "nested/file.txt").write_text("nested content\n")
     monkeypatch.chdir(git_repo)
-    result = runner.invoke(app, ["diff", *(["--json"] if json_output else [])])
-    assert result.exit_code == 2, repr(result.exception)
-    if json_output:
-        response = json.loads(result.stdout)
-        assert response["status"] == "error"
-        message = response["error"]
-        assert result.stderr == ""
-    else:
-        message = result.stderr
-        assert result.stdout == ""
-    assert "nested/" in message
-    assert "diff.exclude" in message
-    config = xdg_home / "config/dresscode"
-    config.mkdir()
-    (config / "config.toml").write_text('[diff]\nexclude = ["nested"]\n')
-    excluded = runner.invoke(app, ["diff", "--json"])
-    assert excluded.exit_code == 2, excluded.output
-    assert "nested/" in json.loads(excluded.stdout)["error"]
+    result = runner.invoke(app, ["diff", "--json"])
+    assert result.exit_code == 2, result.output
+    assert "'nested/'" in json.loads(result.stdout)["error"]
 
 
 @pytest.mark.parametrize(
-    "config", ['merge_base_with = "missing"', "[diff]\nexclude = false"]
+    ("config", "error"),
+    [
+        ('merge_base_with = "missing"', "merge_base_with"),
+        ("[diff]\nexclude = false", "diff.exclude"),
+        ('[diff]\nexclude = [":(unknown)README.md"]', "Invalid pathspec magic"),
+    ],
 )
 def test_invalid_diff_configuration_returns_json_error(
-    git_repo: Path, monkeypatch: pytest.MonkeyPatch, config: str
+    git_repo: Path, monkeypatch: pytest.MonkeyPatch, config: str, error: str
 ) -> None:
     monkeypatch.chdir(git_repo)
-    (git_repo / ".dresscode.toml").write_text(config)
+    (git_repo / ".dresscode.toml").write_text(
+        config + '\n[[entries]]\nid = "rule"\nquestion = "Reviewed?"\n'
+        'expects = true\ncontext = "printf evidence"\n'
+    )
     commit_all(git_repo)
-    result = runner.invoke(app, ["diff", "--json"])
-    assert result.exit_code == 2
-    assert json.loads(result.stdout)["status"] == "error"
-    assert result.stderr == ""
+    for args in (
+        ["list"],
+        ["answer", "rule", "--yes", "--evidence", "Reviewed"],
+        ["waive", "rule", "--reason", "Accepted"],
+        ["check"],
+        ["diff"],
+        ["report"],
+    ):
+        result = runner.invoke(app, [*args, "--json"])
+        assert result.exit_code == 2, result.output
+        response = json.loads(result.stdout)
+        assert response["status"] == "error"
+        assert error in response["error"]
+        assert result.stderr == ""

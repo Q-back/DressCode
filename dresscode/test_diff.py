@@ -66,7 +66,7 @@ def test_cumulative_diff_only_reads_committed_paths(git_repo: Path) -> None:
 
     result = scope(git_repo)
 
-    assert result.base_commit == git(git_repo, "rev-parse", "main")
+    assert result.scope.base_commit == git(git_repo, "rev-parse", "main")
     assert [(file.path, file.added, file.removed) for file in result.files] == [
         ("README.md", 1, 1),
     ]
@@ -95,7 +95,7 @@ def test_base_moving_on_does_not_enter_the_diff(git_repo: Path) -> None:
     git(git_repo, "add", ".")
     git(git_repo, "commit", "--message", "Feature change")
     result = scope(git_repo)
-    assert result.base_commit == initial
+    assert result.scope.base_commit == initial
     assert [file.path for file in result.files] == ["feature.py"]
 
 

@@ -177,10 +177,13 @@ def test_cli_dirty_submodule_error_is_actionable_and_read_only(
     root, submodule = submodule_repo
     (submodule / "file.txt").write_text("dirty\n")
     monkeypatch.chdir(root)
+    baseline = git(root, "rev-parse", "HEAD")
+    git(root, "branch", "--force", "main", "HEAD~1")
+    diff = ["diff", "--base", baseline]
     before = git(root, "status", "--porcelain=v1", "--ignore-submodules=none")
     index = submodule / git(submodule, "rev-parse", "--git-path", "index")
     index_before = index.read_bytes()
-    result = CliRunner().invoke(app, ["diff", *options])
+    result = CliRunner().invoke(app, [*diff, *options])
     assert result.exit_code == 2, result.output
     if "--json" in options:
         response = json.loads(result.stdout)
@@ -200,11 +203,12 @@ def test_cli_dirty_submodule_error_is_actionable_and_read_only(
     assert list((xdg_home / "state").iterdir()) == []
     git(submodule, "commit", "--all", "--message", "Commit reviewed content")
     git(root, "add", "lib")
-    staged = CliRunner().invoke(app, ["diff", "--json"])
+    staged = CliRunner().invoke(app, [*diff, "--json"])
     assert staged.exit_code == 2, staged.output
     git(root, "commit", "-m", "Update parent pointer")
-    clean = CliRunner().invoke(app, ["diff", "--json"])
+    clean = CliRunner().invoke(app, [*diff, "--json"])
     assert clean.exit_code == 0, clean.output
-    assert json.loads(clean.stdout)["files"] == [
-        {"path": "lib", "added": 1, "removed": 1}
-    ]
+    response = json.loads(clean.stdout)
+    assert response["base_commit"] == baseline
+    assert response["head_commit"] == git(root, "rev-parse", "HEAD")
+    assert response["files"] == [{"path": "lib", "added": 1, "removed": 1}]

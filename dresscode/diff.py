@@ -61,10 +61,6 @@ class ScopedDiff:
     files: tuple[FileChange, ...]
 
     @property
-    def base_commit(self) -> str:
-        return self.scope.base_commit
-
-    @property
     def added(self) -> int:
         return sum(file.added or 0 for file in self.files)
 
@@ -93,6 +89,20 @@ def collect(config: Configuration, scope: ResolvedScope | None = None) -> Scoped
     )
     files = [_parse_numstat(record) for record in counts.split(b"\0") if record]
     return ScopedDiff(scope, tuple(sorted(files, key=lambda file: file.path)))
+
+
+def validate_diff_exclusions(config: Configuration, scope: ResolvedScope) -> None:
+    if "diff" in config.settings:
+        # Let Git validate configured pathspecs without comparing different trees.
+        _git(
+            config.repository.root,
+            "diff",
+            "--quiet",
+            scope.head_commit,
+            scope.head_commit,
+            "--",
+            *_pathspecs(config),
+        )
 
 
 def resolve_scope(config: Configuration, reference: str | None = None) -> ResolvedScope:

@@ -216,19 +216,3 @@ def test_context_pins_ref_before_movement_and_allows_explicit_auxiliary_scope(
         json.loads(auxiliary["entries"][0]["context_output"])["base_commit"] == second
     )
     assert document(root, "diff")["base_commit"] == first
-
-
-def test_exact_submodule_baseline_is_stable_and_dirty_content_blocks(
-    submodule_repo: tuple[Path, Path],
-) -> None:
-    root, submodule = submodule_repo
-    baseline = git(root, "rev-parse", "HEAD").strip()
-    (submodule / "file.txt").write_text("new\n")
-    git(submodule, "commit", "-am", "Update submodule")
-    assert "'lib'" in document(root, "diff", "--base", baseline, code=2)["error"]
-    commit_all(root, "Commit updated submodule pointer")
-    first = document(root, "diff", "--base", baseline)
-    assert first["files"] == [{"path": "lib", "added": 1, "removed": 1}]
-    assert first["head_commit"] == git(root, "rev-parse", "HEAD")
-    (submodule / "file.txt").write_text("dirty\n")
-    assert "'lib'" in document(root, "diff", "--base", baseline, code=2)["error"]

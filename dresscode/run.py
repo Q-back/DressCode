@@ -28,8 +28,11 @@ class ContextRecord(TypedDict):
     head_commit: str
 
 
+type Verdict = Literal["yes", "no", "n-a"]
+
+
 class VerdictRecord(TypedDict):
-    verdict: str
+    verdict: Verdict
     evidence: str
     head_commit: str
     timestamp: str
@@ -78,7 +81,6 @@ class RunStore:
             raise RunError(f"{self.path}: {error}") from error
         if not _valid_state(document, self.run_key):
             raise RunError(f"{self.path}: invalid run state")
-        document.setdefault("contexts", {})
         return cast(RunState, document)
 
     def save_contexts(self, contexts: dict[str, ContextRecord]) -> None:
@@ -90,7 +92,7 @@ class RunStore:
     def record(
         self,
         entry: Entry,
-        verdict: Literal["yes", "no", "n-a"],
+        verdict: Verdict,
         evidence: str,
         after_save: Callable[[], None] | None = None,
         context_output: str | None = None,
@@ -228,14 +230,16 @@ def _valid_state(document: object, run_key: str) -> bool:
     if not isinstance(waivers, dict):
         return False
     for record in (*verdicts.values(), *history):
-        if not isinstance(record, dict) or not all(
-            isinstance(record.get(field), str)
-            for field in ("verdict", "evidence", "timestamp")
-        ):
-            return False
-        if not _valid_commit(record.get("head_commit")) or any(
-            key in record and not isinstance(record[key], str)
-            for key in ("context_output", "context_command")
+        if (
+            not isinstance(record, dict)
+            or record.get("verdict") not in ("yes", "no", "n-a")
+            or not isinstance(record.get("evidence"), str)
+            or not isinstance(record.get("timestamp"), str)
+            or not _valid_commit(record.get("head_commit"))
+            or any(
+                key in record and not isinstance(record[key], str)
+                for key in ("context_output", "context_command")
+            )
         ):
             return False
     for identifier, waiver in waivers.items():
@@ -249,7 +253,7 @@ def _valid_state(document: object, run_key: str) -> bool:
             or not waiver["reason"].strip()
         ):
             return False
-    contexts = document.get("contexts", {})
+    contexts = document.get("contexts")
     if not isinstance(contexts, dict) or any(
         not isinstance(identifier, str)
         or not isinstance(record, dict)

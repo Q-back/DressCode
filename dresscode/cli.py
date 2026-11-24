@@ -17,7 +17,14 @@ from dresscode.authoring import append_entry
 from dresscode.config import Configuration, ConfigurationError, load
 from dresscode.context import collect_contexts, required_context
 from dresscode.context import trust as trust_context
-from dresscode.diff import DiffError, collect, dirty_paths, require_clean, resolve_scope
+from dresscode.diff import (
+    DiffError,
+    collect,
+    dirty_paths,
+    require_clean,
+    resolve_scope,
+    validate_diff_exclusions,
+)
 from dresscode.entries import Entry
 from dresscode.gate import review
 from dresscode.repo import Repository, RepositoryError, discover
@@ -235,7 +242,7 @@ def list_entries(json_output: JsonOutput = False, base: BaseSelection = None) ->
         scope = resolve_scope(config, base)
         contexts = {}
         if contextual:
-            collect(config, scope)
+            validate_diff_exclusions(config, scope)
             contexts = collect_contexts(config, contextual, scope)
             RunStore(scope).save_contexts(contexts)
     except (StoreError, RunError, DiffError) as error:
@@ -304,7 +311,8 @@ def answer(
     if entry is None:
         fail(f"Unknown entry: {identifier}", json_output)
     try:
-        scoped = collect(config, resolve_scope(config, base))
+        scope = resolve_scope(config, base)
+        validate_diff_exclusions(config, scope)
     except DiffError as error:
         fail(str(error), json_output)
     verdict = "n-a" if not_applicable else "yes" if yes else "no"
@@ -312,10 +320,10 @@ def answer(
     expected = "yes" if entry.expects else "no"
     matched = verdict == "n-a" or verdict == expected
     try:
-        run = RunStore(scoped.scope)
+        run = RunStore(scope)
         context_output = None
         if entry.context is not None:
-            context = required_context(config, entry, run.read(), scoped.scope)
+            context = required_context(config, entry, run.read(), scope)
             if context["state"] != "ready":
                 fail(context["error"], json_output)
             context_output = context["context_output"]
@@ -332,7 +340,7 @@ def answer(
     except (RunError, StoreError) as error:
         fail(str(error), json_output)
     response = {
-        **scoped.scope.metadata(),
+        **scope.metadata(),
         "status": "recorded",
         "id": identifier,
         "verdict": verdict,
@@ -345,7 +353,7 @@ def answer(
     if json_output:
         typer.echo(json.dumps(response))
         return
-    typer.echo(scoped.scope.description())
+    typer.echo(scope.description())
     typer.echo(
         f"Recorded {identifier}: {verdict} (expected {expected}; "
         f"matched: {'yes' if matched else 'no'})."
@@ -362,13 +370,15 @@ def check(
 ) -> None:
     config = configuration(json_output, clean=True)
     try:
-        scoped, state, decision = review(config, strict, resolve_scope(config, base))
+        scope = resolve_scope(config, base)
+        validate_diff_exclusions(config, scope)
+        state, decision = review(config, scope, strict)
     except (DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     if json_output:
         typer.echo(json.dumps(decision))
     else:
-        typer.echo(scoped.scope.description())
+        typer.echo(scope.description())
         typer.echo(decision["status"])
         for entry in decision["entries"]:
             if entry["commands"]:
@@ -402,16 +412,15 @@ def waive(
         )
         if entry is None:
             fail(f"Unknown entry: {identifier}", json_output)
-        scoped = collect(config, resolve_scope(config, base))
-        waiver = RunStore(scoped.scope).waive(entry, reason)
+        scope = resolve_scope(config, base)
+        validate_diff_exclusions(config, scope)
+        waiver = RunStore(scope).waive(entry, reason)
     except (DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     typer.echo(
-        json.dumps(
-            {**scoped.scope.metadata(), "status": "waived", "id": identifier, **waiver}
-        )
+        json.dumps({**scope.metadata(), "status": "waived", "id": identifier, **waiver})
         if json_output
-        else f"{scoped.scope.description()}\nWaived {identifier}: {waiver['reason']}"
+        else f"{scope.description()}\nWaived {identifier}: {waiver['reason']}"
     )
 
 
@@ -434,7 +443,8 @@ def report(json_output: JsonOutput = False, base: BaseSelection = None) -> None:
                 "Commit or undo these changes before reporting."
             )
         config = load(repo)
-        scoped, state, decision = review(config, scope=resolve_scope(config, base))
+        scoped = collect(config, resolve_scope(config, base))
+        state, decision = review(config, scoped.scope)
     except (ConfigurationError, DiffError, RunError, StoreError) as error:
         fail(str(error), json_output)
     summary = summarize(config, scoped, state, decision, bool(paths))

@@ -157,10 +157,17 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
         path.name: path.read_bytes() for path in (root / ".git/hooks").iterdir()
     } == hooks_before
 
-    (root / "first.txt").write_text("changed after review\n")
+    (root / "first.txt").write_text("Unstaged edit\n")
+    (root / "second.txt").write_text("Staged edit\n")
+    git(root, "add", "second.txt")
+    (root / "uv.lock").write_text("Untracked excluded file\n")
     assert "first.txt" in document(root, "check", code=2)["error"]
     dirty = document(root, "report")
     assert dirty == {**summary, "working_tree_dirty": True, "status": "failed"}
+    plain = cli(root, "report").stdout
+    assert "local edits are not covered" in plain
+    assert "Reviewed size" in plain and reason in " ".join(plain.split())
+    assert "\x1b[" not in plain
 
     commit_all(root)
     stale = document(root, "check", code=1)

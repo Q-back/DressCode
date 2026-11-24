@@ -5,7 +5,7 @@ from typing import NotRequired, TypedDict
 
 from dresscode.config import Configuration
 from dresscode.context import required_context
-from dresscode.diff import ResolvedScope, ScopedDiff, collect
+from dresscode.diff import ResolvedScope
 from dresscode.entries import Entry
 from dresscode.run import RunState, RunStore
 from dresscode.store import EntryStore
@@ -28,18 +28,17 @@ class GateDecision(TypedDict):
 
 
 def review(
-    config: Configuration, strict: bool = False, scope: ResolvedScope | None = None
-) -> tuple[ScopedDiff, RunState, GateDecision]:
+    config: Configuration, scope: ResolvedScope, strict: bool = False
+) -> tuple[RunState, GateDecision]:
     retired = EntryStore(config.repository).retirements()
-    scoped = collect(config, scope)
-    state = RunStore(scoped.scope).read()
+    state = RunStore(scope).read()
     decisions = []
     for entry in config.entries:
         if entry.id in retired:
             continue
-        status = entry_state(entry, state, scoped.scope.head_commit)
+        status = entry_state(entry, state, scope.head_commit)
         context = (
-            required_context(config, entry, state, scoped.scope)
+            required_context(config, entry, state, scope)
             if entry.context is not None
             else None
         )
@@ -53,28 +52,24 @@ def review(
             id=entry.id,
             question=entry.question,
             state=status,
-            commands=fixing_commands(entry.id, status, strict, scoped.base_commit),
+            commands=fixing_commands(entry.id, status, strict, scope.base_commit),
         )
         if context is not None and context["state"] != "ready":
             decision["error"] = context["error"]
             if context["state"] == "unanswered":
                 decision["commands"].insert(
-                    0, f"dresscode list --base {scoped.base_commit}"
+                    0, f"dresscode list --base {scope.base_commit}"
                 )
         decisions.append(decision)
     blocked = any(item["commands"] for item in decisions)
     waived = any(item["state"] == "waived" for item in decisions)
     status = "failed" if blocked else "passed-with-waivers" if waived else "passed"
-    return (
-        scoped,
-        state,
-        GateDecision(
-            status=status,
-            entries=decisions,
-            base_commit=scoped.base_commit,
-            head_commit=scoped.scope.head_commit,
-            run_key=scoped.scope.run_key,
-        ),
+    return state, GateDecision(
+        status=status,
+        entries=decisions,
+        base_commit=scope.base_commit,
+        head_commit=scope.head_commit,
+        run_key=scope.run_key,
     )
 
 
@@ -87,8 +82,6 @@ def entry_state(entry: Entry, state: RunState, head_commit: str) -> str:
         or record.get("context_command") != entry.context
     ):
         return "stale"
-    if record["verdict"] == "context_failed":
-        return "context_failed"
     expected = "yes" if entry.expects else "no"
     if record["verdict"] in (expected, "n-a"):
         return "passed"
