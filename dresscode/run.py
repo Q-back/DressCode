@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import tempfile
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
@@ -24,13 +25,16 @@ class ContextRecord(TypedDict):
     context_output: str
     error: str
     command: str
-    fingerprint: str
+    head_commit: str
+
+
+type Verdict = Literal["yes", "no", "n-a"]
 
 
 class VerdictRecord(TypedDict):
-    verdict: str
+    verdict: Verdict
     evidence: str
-    fingerprint: str
+    head_commit: str
     timestamp: str
     context_output: NotRequired[str]
     context_command: NotRequired[str]
@@ -42,7 +46,7 @@ class HistoryRecord(VerdictRecord):
 
 class WaiverRecord(TypedDict):
     reason: str
-    fingerprint: str
+    head_commit: str
     timestamp: str
 
 
@@ -59,6 +63,7 @@ class RunStore:
 
     def __init__(self, scope: ResolvedScope) -> None:
         self.run_key = scope.run_key
+        self.head_commit = scope.head_commit
         home = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
         filename = hashlib.sha256(self.run_key.encode()).hexdigest() + ".json"
         self.path = home / "dresscode" / "runs" / filename
@@ -76,7 +81,6 @@ class RunStore:
             raise RunError(f"{self.path}: {error}") from error
         if not _valid_state(document, self.run_key):
             raise RunError(f"{self.path}: invalid run state")
-        document.setdefault("contexts", {})
         return cast(RunState, document)
 
     def save_contexts(self, contexts: dict[str, ContextRecord]) -> None:
@@ -88,9 +92,8 @@ class RunStore:
     def record(
         self,
         entry: Entry,
-        verdict: Literal["yes", "no", "n-a"],
+        verdict: Verdict,
         evidence: str,
-        fingerprint: str,
         after_save: Callable[[], None] | None = None,
         context_output: str | None = None,
         context_command: str | None = None,
@@ -104,7 +107,7 @@ class RunStore:
             record: VerdictRecord = {
                 "verdict": verdict,
                 "evidence": evidence,
-                "fingerprint": fingerprint,
+                "head_commit": self.head_commit,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
             if context_output is not None:
@@ -128,7 +131,7 @@ class RunStore:
                     raise
             return record
 
-    def waive(self, entry: Entry, reason: str, fingerprint: str) -> WaiverRecord:
+    def waive(self, entry: Entry, reason: str) -> WaiverRecord:
         if not reason.strip():
             raise RunError("--reason must not be empty")
         with self._lock():
@@ -137,7 +140,7 @@ class RunStore:
             violating = "no" if entry.expects else "yes"
             if (
                 verdict is None
-                or verdict["fingerprint"] != fingerprint
+                or verdict["head_commit"] != self.head_commit
                 or verdict["verdict"] != violating
                 or verdict.get("context_command") != entry.context
             ):
@@ -146,22 +149,12 @@ class RunStore:
                 )
             waiver: WaiverRecord = {
                 "reason": reason.strip(),
-                "fingerprint": fingerprint,
+                "head_commit": self.head_commit,
                 "timestamp": datetime.now(UTC).isoformat(),
             }
             state["waivers"][entry.id] = waiver
             self._write(state)
             return waiver
-
-    def stale_verdicts(self, fingerprint: str) -> tuple[str, ...]:
-        state = self.read()
-        return tuple(
-            sorted(
-                identifier
-                for identifier, record in state["verdicts"].items()
-                if record["fingerprint"] != fingerprint
-            )
-        )
 
     def reset(self) -> None:
         with self._lock():
@@ -237,14 +230,16 @@ def _valid_state(document: object, run_key: str) -> bool:
     if not isinstance(waivers, dict):
         return False
     for record in (*verdicts.values(), *history):
-        if not isinstance(record, dict) or not all(
-            isinstance(record.get(field), str)
-            for field in ("verdict", "evidence", "fingerprint", "timestamp")
-        ):
-            return False
-        if any(
-            key in record and not isinstance(record[key], str)
-            for key in ("context_output", "context_command")
+        if (
+            not isinstance(record, dict)
+            or record.get("verdict") not in ("yes", "no", "n-a")
+            or not isinstance(record.get("evidence"), str)
+            or not isinstance(record.get("timestamp"), str)
+            or not _valid_commit(record.get("head_commit"))
+            or any(
+                key in record and not isinstance(record[key], str)
+                for key in ("context_output", "context_command")
+            )
         ):
             return False
     for identifier, waiver in waivers.items():
@@ -252,16 +247,17 @@ def _valid_state(document: object, run_key: str) -> bool:
             not isinstance(identifier, str)
             or not isinstance(waiver, dict)
             or not all(
-                isinstance(waiver.get(field), str)
-                for field in ("reason", "fingerprint", "timestamp")
+                isinstance(waiver.get(field), str) for field in ("reason", "timestamp")
             )
+            or not _valid_commit(waiver.get("head_commit"))
             or not waiver["reason"].strip()
         ):
             return False
-    contexts = document.get("contexts", {})
+    contexts = document.get("contexts")
     if not isinstance(contexts, dict) or any(
         not isinstance(identifier, str)
         or not isinstance(record, dict)
+        or not _valid_commit(record.get("head_commit"))
         or not all(
             isinstance(record.get(key), str) for key in ContextRecord.__annotations__
         )
@@ -269,3 +265,10 @@ def _valid_state(document: object, run_key: str) -> bool:
     ):
         return False
     return all(isinstance(identifier, str) for identifier in verdicts)
+
+
+def _valid_commit(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", value) is not None
+    )

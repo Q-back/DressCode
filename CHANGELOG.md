@@ -7,6 +7,15 @@ or breaking changes.
 
 ## Unreleased
 
+### Changed
+
+- Reviews compare committed snapshots. The `diff`, `list`, `answer`, `waive`,
+  and `check` commands require a clean working tree.
+- Verdicts, waivers, and cached context apply to the exact reviewed commit.
+  After upgrading, review again to record fresh verdicts and waivers.
+- JSON output replaces `fingerprint` with `head_commit`. Reports count committed
+  changes and flag local edits. Uncommitted repository rule changes block reports.
+
 ## 0.1.0 - 2026-11-16
 
 ### Added

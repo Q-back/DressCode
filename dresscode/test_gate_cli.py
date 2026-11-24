@@ -11,6 +11,7 @@ from dresscode.diff import resolve_scope
 from dresscode.repo import discover
 from dresscode.report import render
 from dresscode.run import RunStore
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 
@@ -22,6 +23,7 @@ def configured_repository(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> No
         '[[entries]]\nid = "factory"\nquestion = "Reuse the factory?"\n'
         'expects = true\nreveal = "Keep setup consistent."\n'
     )
+    commit_all(git_repo)
 
 
 def invoke(*arguments: str):
@@ -43,6 +45,7 @@ def test_suggested_commands_work_with_option_like_and_quoted_ids(
     rules.write_text(
         rules.read_text().replace('id = "factory"', f"id = {json.dumps(identifier)}")
     )
+    commit_all(git_repo)
 
     def run_suggestion(command: str, verdict: str = "--no") -> None:
         filled = command.replace("--yes|--no|--n-a", verdict).replace(
@@ -99,6 +102,7 @@ def test_matching_and_not_applicable_verdicts_pass(verdict: str, strict: bool) -
 
 def test_empty_entry_list_passes(git_repo: Path) -> None:
     (git_repo / ".dresscode.toml").unlink()
+    commit_all(git_repo)
     result = invoke("check", "--json")
 
     assert result.exit_code == 0, result.output
@@ -109,17 +113,13 @@ def test_empty_entry_list_passes(git_repo: Path) -> None:
     }
 
 
-@pytest.mark.parametrize("state", ["unanswered", "violated", "stale", "context_failed"])
+@pytest.mark.parametrize("state", ["unanswered", "violated", "stale"])
 def test_blockers_name_question_state_and_fix(git_repo: Path, state: str) -> None:
     if state != "unanswered":
         record("--no" if state == "violated" else "--yes")
     if state == "stale":
         (git_repo / "new.py").write_text("changed\n")
-    if state == "context_failed":
-        run = RunStore(resolve_scope(load(discover(git_repo))))
-        document = json.loads(run.path.read_text())
-        document["verdicts"]["factory"]["verdict"] = "context_failed"
-        run.path.write_text(json.dumps(document))
+        commit_all(git_repo)
 
     result = invoke("check", "--json")
     assert result.exit_code == 1, result.output
@@ -151,12 +151,14 @@ def test_waiver_passes_normal_gate_but_not_strict(git_repo: Path) -> None:
     result = invoke("waive", "factory", "--reason", "  Accepted tradeoff  ", "--json")
     assert result.exit_code == 0, result.output
     response = json.loads(result.stdout)
+    assert response["head_commit"] == git(git_repo, "rev-parse", "HEAD")
+    assert "fingerprint" not in response
     waiver = RunStore(resolve_scope(load(discover(git_repo)))).read()["waivers"][
         "factory"
     ]
     assert waiver == {
         "reason": "Accepted tradeoff",
-        "fingerprint": response["fingerprint"],
+        "head_commit": git(git_repo, "rev-parse", "HEAD"),
         "timestamp": response["timestamp"],
     }
     normal = invoke("check", "--json")
@@ -174,6 +176,7 @@ def test_invalid_waivers_exit_two(git_repo: Path, verdict: str | None) -> None:
         record("--no" if verdict == "stale" else verdict)
     if verdict == "stale":
         (git_repo / "new.py").write_text("changed\n")
+        commit_all(git_repo)
     reason = "  " if verdict == "--no" else "Accepted"
     result = invoke("waive", "factory", "--reason", reason, "--json")
     assert result.exit_code == 2, result.output
@@ -192,7 +195,8 @@ def test_unknown_id_and_missing_reason_are_usage_errors() -> None:
 def test_waivers_expire_and_reset_with_verdicts(git_repo: Path) -> None:
     record("--no")
     assert invoke("waive", "factory", "--reason", "Accepted").exit_code == 0
-    (git_repo / "new.py").write_text("changed\n")
+    (git_repo / "uv.lock").write_text("changed\n")
+    commit_all(git_repo)
     result = invoke("check", "--json")
     assert result.exit_code == 1
     assert json.loads(result.stdout)["entries"][0]["state"] == "stale"
@@ -258,13 +262,40 @@ def test_unanswered_report_does_not_reveal_sealed_fields() -> None:
     assert "Keep setup consistent." not in invoke("report").stdout
 
 
-def test_report_marks_stale_waivers(git_repo: Path) -> None:
-    record("--no")
-    assert invoke("waive", "factory", "--reason", "Accepted").exit_code == 0
-    (git_repo / "new.py").write_text("changed\n")
-    summary = json.loads(invoke("report", "--json").stdout)
-    assert summary["status"] == "failed"
-    assert summary["waivers"][0]["state"] == "stale"
+@pytest.mark.parametrize(
+    ("path", "change"),
+    [
+        (".dresscode.toml", "unstaged"),
+        (".dresscode/rules.toml", "staged"),
+        (".dresscode/new.toml", "untracked"),
+        (".dresscode/rules.toml", "deleted"),
+    ],
+)
+def test_report_rejects_dirty_repository_config(
+    git_repo: Path, path: str, change: str
+) -> None:
+    rules = git_repo / path
+    if path.startswith(".dresscode/"):
+        rules.parent.mkdir()
+        (git_repo / ".dresscode.toml").rename(rules.parent / "rules.toml")
+        commit_all(git_repo)
+    record()
+
+    if change == "deleted":
+        rules.unlink()
+    else:
+        rules.write_text("broken = [")
+        if change == "staged":
+            git(git_repo, "add", path)
+
+    result = invoke("report", "--json")
+    assert result.exit_code == 2, result.output
+    assert result.stderr == ""
+    assert json.loads(result.stdout) == {
+        "status": "error",
+        "error": f"Repository configuration is dirty: {path!r}. "
+        "Commit or undo these changes before reporting.",
+    }
 
 
 def test_retired_and_disabled_entries_are_absent(git_repo: Path) -> None:
@@ -273,6 +304,7 @@ def test_retired_and_disabled_entries_are_absent(git_repo: Path) -> None:
     assert invoke("retire", "factory").exit_code == 0
     with (git_repo / ".dresscode.toml").open("a") as output:
         output.write('\n[[entries]]\nid = "disabled"\nenabled = false\n')
+    commit_all(git_repo)
     for command in ("check", "report"):
         result = invoke(command, "--json")
         assert result.exit_code == 0, result.output
@@ -282,12 +314,27 @@ def test_retired_and_disabled_entries_are_absent(git_repo: Path) -> None:
         assert summary.get("waivers", []) == []
 
 
-@pytest.mark.parametrize("command", ["check", "report"])
-def test_malformed_waiver_is_a_state_error(git_repo: Path, command: str) -> None:
+@pytest.mark.parametrize(
+    ("command", "field"),
+    [
+        ("check", "waivers"),
+        ("report", "waivers"),
+        ("check", "verdicts"),
+        ("report", "contexts"),
+    ],
+)
+def test_malformed_run_state_is_an_error(
+    git_repo: Path, command: str, field: str
+) -> None:
     record()
     run = RunStore(resolve_scope(load(discover(git_repo))))
     state = json.loads(run.path.read_text())
-    state["waivers"]["factory"] = {"reason": "Missing fingerprint"}
+    if field == "waivers":
+        state["waivers"]["factory"] = {"reason": "Missing head_commit"}
+    elif field == "verdicts":
+        state["verdicts"]["factory"]["verdict"] = "unknown"
+    else:
+        del state["contexts"]
     run.path.write_text(json.dumps(state))
     result = invoke(command, "--json")
     assert result.exit_code == 2, result.output
@@ -297,6 +344,7 @@ def test_malformed_waiver_is_a_state_error(git_repo: Path, command: str) -> None
 @pytest.mark.parametrize("command", ["check", "report"])
 def test_configuration_errors_exit_two(git_repo: Path, command: str) -> None:
     (git_repo / ".dresscode.toml").write_text("broken = [")
+    commit_all(git_repo)
     result = invoke(command, "--json")
 
     assert result.exit_code == 2

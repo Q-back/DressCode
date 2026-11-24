@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 from dresscode.cli import app
 from dresscode.config import ConfigurationError, layer_paths, load
 from dresscode.repo import discover
+from dresscode.test_diff import commit_all
 
 
 def write_config(path: Path, content: str) -> None:
@@ -96,6 +97,7 @@ def test_invalid_toml_is_a_named_exit_2_error(
     write_config(invalid, "invalid = [")
     with pytest.raises(ConfigurationError, match="rules.toml"):
         load(discover(git_repo))
+    commit_all(git_repo)
     monkeypatch.chdir(git_repo)
     result = CliRunner().invoke(app, ["list", *(["--json"] if json_output else [])])
     assert result.exit_code == 2

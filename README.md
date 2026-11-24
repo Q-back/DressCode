@@ -7,7 +7,7 @@ It happens again anyway.
 
 DressCode turns those mistakes into yes/no review questions. Before your agent
 calls the work done, a fresh reviewer must answer each question with evidence.
-The gate checks those answers against the current changes.
+The gate checks those answers against the exact commit the reviewer inspected.
 
 In the author's tests, agents followed the DressCode workflow in situations where
 they ignored a skill containing the same instructions. The difference was asking
@@ -31,19 +31,20 @@ dresscode add shared-builder \
 
 On later changes, the reviewer sees the question, without the expected answer
 or explanation. Those appear only after it records a verdict with evidence.
-If the code changes after review, the answers become stale and need a new review.
+Any different `HEAD` needs fresh answers, even after an empty commit, a
+message-only amendment, or a commit that changes only excluded files.
 
 ## How it fits together
 
 ```mermaid
 flowchart TD
     You[You notice a recurring mistake] --> Rule[Your agent adds a review question]
-    Rule --> Code[Your coding agent makes changes and runs tests]
+    Rule --> Code[Your coding agent makes changes, runs tests, and commits]
     Code --> Review[Your agent requests a fresh-context reviewer]
     Review --> Questions[DressCode lists questions without expected answers]
     Questions --> Evidence[Reviewer inspects the diff and records answers with evidence]
     Evidence --> Gate{Your agent runs the DressCode gate}
-    Gate -->|Changes needed| Fix[Your agent fixes the findings]
+    Gate -->|Changes needed| Fix[Your agent fixes, tests, and commits]
     Fix --> Review
     Gate -->|Passes| Done[Your agent reports the result and hands over]
 ```
@@ -82,15 +83,21 @@ answers; it does not launch the reviewer or verify its independence.
 
 ## What your agent runs
 
-You ask for a change. Your agent implements it, runs tests, then arranges review:
+You ask for a change. Your agent implements it, runs tests, and commits before
+arranging review. DressCode compares the selected baseline with `HEAD`:
 
 | When | Command | Who and why |
 |---|---|---|
 | Prepare review | `dresscode diff --json` | Your agent identifies the review scope, then gives the actual code diff to a fresh reviewer. |
 | Get questions | `dresscode list --json` | The reviewer gets the questions and any configured context evidence. |
 | Record each verdict | `dresscode answer <id> --yes --evidence "<findings>"` | The reviewer records its judgment; use `--no` or `--n-a` where appropriate. |
-| Before hand-over | `dresscode check` | Your agent requires current passing answers, fixes findings and arranges another review when needed. |
-| Show the result | `dresscode report` | Your agent reports the verdicts and evidence to you. |
+| Before hand-over | `dresscode check` | Your agent requires current passing answers. If fixes are needed, it tests and commits before re-review. |
+| Show the result | `dresscode report` | Your agent reports the verdicts and evidence. Local source edits do not block this command, but local edits to repository rules do. |
+
+`diff`, `list`, `answer`, `waive`, and `check` require a clean checkout. Ignored
+files do not block review, but `diff.exclude` does not hide local changes.
+Review JSON uses `head_commit` instead of `fingerprint`. After upgrading,
+review again; see [downgrading safely](docs/manual.md#installation-maintenance).
 
 For a **review-only request**, the reviewer records answers and reports findings.
 It does not edit code, grant exceptions or run the hand-over gate.

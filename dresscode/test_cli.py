@@ -78,14 +78,16 @@ def test_diff_help_explains_scope_and_base_priority(
 
     assert result.exit_code == 0
     help_text = normalize_help_text(result.stdout)
-    assert "merge base of HEAD and the selected base" in help_text
-    assert "working tree" in help_text
-    assert "committed, staged, unstaged and untracked non-ignored files" in help_text
+    assert "selected baseline to the committed HEAD" in help_text
+    assert "Requires a clean working tree" in help_text
     assert (
         "configured merge_base_with, origin/HEAD, local main, local master, then the root commit"
         in help_text
     )
-    assert "Configured diff exclusions apply" in help_text
+    assert (
+        "exclusions apply to the committed diff, not to the cleanliness check"
+        in help_text
+    )
 
 
 @pytest.mark.parametrize("command", COMMANDS)

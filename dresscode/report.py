@@ -18,6 +18,7 @@ def summarize(
     scoped: ScopedDiff,
     state: RunState,
     decision: GateDecision,
+    working_tree_dirty: bool,
 ) -> dict[str, Any]:
     entries = []
     waivers = []
@@ -44,11 +45,12 @@ def summarize(
                 }
             )
     return {
-        "status": decision["status"],
+        "status": "failed" if working_tree_dirty else decision["status"],
         **scoped.scope.metadata(),
+        "working_tree_dirty": working_tree_dirty,
         "diff": {
-            "base_commit": scoped.base_commit,
-            "fingerprint": scoped.fingerprint,
+            "base_commit": scoped.scope.base_commit,
+            "head_commit": scoped.scope.head_commit,
             "added": scoped.added,
             "removed": scoped.removed,
         },
@@ -63,10 +65,15 @@ def render(summary: dict[str, Any]) -> None:
         summary["status"]
     ]
     console.print(Text(summary["status"], style=f"bold {color}"))
+    if summary["working_tree_dirty"]:
+        console.print(
+            Text("Working tree is dirty; local edits are not covered.", style="yellow")
+        )
     diff = summary["diff"]
     console.print(
-        Text.from_ansi(
-            f"Diff: +{diff['added']} / -{diff['removed']} (base {diff['base_commit']})"
+        Text(
+            f"Diff: +{diff['added']} / -{diff['removed']} "
+            f"(base {diff['base_commit']}, HEAD {diff['head_commit']})"
         )
     )
     for entry in summary["entries"]:

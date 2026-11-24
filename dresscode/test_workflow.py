@@ -6,11 +6,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
 
-def git(root: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ["git", *arguments], cwd=root, check=True, capture_output=True, text=True
-    ).stdout
+from dresscode.test_diff import commit_all, git
 
 
 def cli(root: Path, *arguments: str, code: int = 0) -> subprocess.CompletedProcess[str]:
@@ -35,6 +33,7 @@ def test_report_groups_multiple_rules_and_preserves_json(workflow_repo: Path):
     root = workflow_repo
     cli(root, "trust")
     (root / "change.txt").write_text("A small catalog change.\n")
+    commit_all(root)
     listed = document(root, "list")["entries"]
     evidence = (
         "demo/fruit_catalog.py:12 keeps [Pear] before [Apple]. "
@@ -50,13 +49,15 @@ def test_report_groups_multiple_rules_and_preserves_json(workflow_repo: Path):
     for stale in (False, True):
         if stale:
             (root / "change.txt").write_text("Changed after the review.\n")
+            commit_all(root)
         summary = document(root, "report")
         rendered = cli(root, "report").stdout
         assert "\x1b[" not in rendered
         assert summary == document(root, "report")
         assert summary["status"] == ("failed" if stale else "passed-with-waivers")
         compact = "".join(rendered.split())
-        assert summary["diff"]["base_commit"] in compact
+        assert summary["base_commit"] in compact
+        assert summary["head_commit"] in compact
         assert "Expected:" not in rendered
         blocks = rendered.split("Rule: ")[1:]
         assert len(blocks) == 3
@@ -90,8 +91,12 @@ def test_report_groups_multiple_rules_and_preserves_json(workflow_repo: Path):
         assert f"size [{waiver['state']}]: {reason}" in rendered.split("Waivers\n")[1]
 
 
-def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Path):
+def test_waived_review_covers_intermediate_commits_and_expires(
+    workflow_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     root = workflow_repo
+    trace = tmp_path / "git-trace"
+    monkeypatch.setenv("GIT_TRACE", str(trace))
     cli(root, "trust")
     initial = document(root, "check", code=1)
     assert initial["status"] == "failed"
@@ -114,6 +119,7 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
     assert pending["status"] == "failed"
     assert any(entry["state"] == "unanswered" for entry in pending["entries"])
     scoped = document(root, "diff")
+    assert trace.read_text().count(" --numstat ") == 1
     assert {item["path"] for item in scoped["files"]} == {"first.txt", "second.txt"}
     assert scoped["totals"] == {"added": 2, "removed": 0}
     status_before = git(root, "status", "--porcelain=v1", "--untracked-files=all")
@@ -144,11 +150,14 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
     strict = document(root, "check", "--strict", code=1)
     assert strict["status"] == "failed"
     assert any(entry["state"] == "waived" for entry in strict["entries"])
+    # Only the standalone diff and the diff requested by the context use numstat.
+    assert trace.read_text().count(" --numstat ") == 2
     report = cli(root, "report").stdout
     assert "passed-with-waivers" in report and "Waivers" in report
     assert reason in " ".join(report.split())
     assert "\x1b[" not in report
     summary = document(root, "report")
+    assert trace.read_text().count(" --numstat ") == 4
     assert summary["entries"][0]["context_output"] == context_output
     assert summary["waivers"][0]["state"] == "current"
     assert (
@@ -158,21 +167,54 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
         path.name: path.read_bytes() for path in (root / ".git/hooks").iterdir()
     } == hooks_before
 
-    (root / "first.txt").write_text("changed after review\n")
+    (root / "first.txt").write_text("Unstaged edit\n")
+    (root / "second.txt").write_text("Staged edit\n")
+    git(root, "add", "second.txt")
+    (root / "uv.lock").write_text("Untracked excluded file\n")
+    assert "first.txt" in document(root, "check", code=2)["error"]
+    dirty = document(root, "report")
+    assert dirty == {**summary, "working_tree_dirty": True, "status": "failed"}
+    plain = cli(root, "report").stdout
+    assert "local edits are not covered" in plain
+    assert "Reviewed size" in plain and reason in " ".join(plain.split())
+    assert "\x1b[" not in plain
+
+    commit_all(root)
     stale = document(root, "check", code=1)
     assert {entry["state"] for entry in stale["entries"]} == {"stale"}
     expired = document(root, "report")
     assert expired["status"] == "failed"
     assert expired["waivers"][0]["state"] == "stale"
-    assert expired["diff"]["fingerprint"] != scoped["fingerprint"]
+    assert expired["head_commit"] != scoped["head_commit"]
+    assert expired["working_tree_dirty"] is False
+
+    refreshed = document(root, "list")
+    for identifier, verdict in (
+        ("size", "yes"),
+        ("side-effects", "no"),
+        ("python", "n-a"),
+    ):
+        answer = document(
+            root,
+            "answer",
+            identifier,
+            f"--{verdict}",
+            "--evidence",
+            "Reviewed new commit",
+        )
+        assert (
+            answer["head_commit"] == refreshed["head_commit"] == expired["head_commit"]
+        )
+    assert document(root, "check", "--strict")["status"] == "passed"
 
 
 def test_review_reports_violations_without_fixes_or_waivers(workflow_repo: Path):
     root = workflow_repo
     cli(root, "trust")
     (root / "change.txt").write_text("A change to review without fixing it.\n")
+    commit_all(root)
     status_before = git(root, "status", "--porcelain=v1", "--untracked-files=all")
-    fingerprint = document(root, "diff")["fingerprint"]
+    head_commit = document(root, "diff")["head_commit"]
     listed = document(root, "list")["entries"]
     verdicts = {
         "size": ("yes", "The diff adds one line."),
@@ -195,7 +237,7 @@ def test_review_reports_violations_without_fixes_or_waivers(workflow_repo: Path)
         verdict, evidence = verdicts[entry["id"]]
         assert entry["verdict"] == verdict
         assert entry["evidence"] == evidence
-    assert summary["diff"]["fingerprint"] == fingerprint
+    assert summary["head_commit"] == head_commit
     assert document(root, "check", code=1)["status"] == "failed"
     assert document(root, "check", "--strict", code=1)["status"] == "failed"
     assert (
@@ -207,6 +249,7 @@ def test_unwaived_review_passes_both_gates_and_reports_evidence(workflow_repo: P
     root = workflow_repo
     cli(root, "trust")
     (root / "change.txt").write_text("A small text-only change.\n")
+    commit_all(root)
     assert document(root, "check", code=1)["status"] == "failed"
     status_before = git(root, "status", "--porcelain=v1", "--untracked-files=all")
     scoped = document(root, "diff")
@@ -229,7 +272,7 @@ def test_unwaived_review_passes_both_gates_and_reports_evidence(workflow_repo: P
     assert summary["status"] == "passed"
     assert summary["diff"]["added"] == 1
     assert summary["diff"]["removed"] == 0
-    assert summary["diff"]["fingerprint"] == scoped["fingerprint"]
+    assert summary["head_commit"] == scoped["head_commit"]
     assert summary["waivers"] == []
     reveals = {
         "size": "Keep reviews manageable.",

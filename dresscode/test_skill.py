@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 from dresscode import cli
 from dresscode.cli import app
 from dresscode.test_cli import normalize_help_text
-from dresscode.test_diff import git
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 
@@ -443,6 +443,8 @@ def test_skill_rule_example_can_be_created_and_reviewed(
     assert arguments[0] == "dresscode"
     added = runner.invoke(app, arguments[1:])
     assert added.exit_code == 0, added.output
+    assert runner.invoke(app, ["list"]).exit_code == 2
+    commit_all(git_repo)
     listed = runner.invoke(app, ["list", "--json"])
     assert listed.exit_code == 0, listed.output
     assert "shared-builder" in listed.stdout
@@ -461,6 +463,8 @@ def test_skill_rule_example_can_be_created_and_reviewed(
     assert answered.exit_code == 0, answered.output
     assert runner.invoke(app, ["check", "--strict"]).exit_code == 0
     (git_repo / "change.txt").write_text("Changed after review.\n")
+    assert runner.invoke(app, ["check"]).exit_code == 2
+    commit_all(git_repo)
     assert runner.invoke(app, ["check"]).exit_code == 1
 
 
@@ -468,16 +472,14 @@ def test_skill_rule_example_can_be_created_and_reviewed(
 def test_documented_scoped_workflow_runs_with_pinned_metadata(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch, source: str
 ) -> None:
-    from dresscode.test_diff import git
-
     monkeypatch.chdir(git_repo)
-    for index in range(2):
-        git(git_repo, "commit", "--allow-empty", "-m", f"Commit {index}")
+    git(git_repo, "commit", "--allow-empty", "-m", "Earlier change")
     identifier = "shared-builder" if source == "skill" else "test-factory"
     added = runner.invoke(
         app, ["add", identifier, "--question", "Reuse?", "--expects", "true"]
     )
     assert added.exit_code == 0, added.output
+    commit_all(git_repo)
     text = (
         skill_text()
         if source == "skill"
@@ -497,6 +499,13 @@ def test_documented_scoped_workflow_runs_with_pinned_metadata(
     assert result.returncode == 0, result.stdout + result.stderr
     baseline = git(git_repo, "rev-parse", "HEAD~2")
     assert baseline in result.stdout
+    head_commit = git(git_repo, "rev-parse", "HEAD")
+    listed = next(
+        json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")
+    )
+    assert listed["base_commit"] == baseline
+    assert listed["head_commit"] == head_commit
+    assert "fingerprint" not in listed
     reset = runner.invoke(app, ["check", "--base", baseline, "--json"])
     assert reset.exit_code == 1
     assert "unanswered" in reset.stdout

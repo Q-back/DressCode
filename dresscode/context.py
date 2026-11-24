@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from dresscode.config import Configuration
-from dresscode.diff import ResolvedScope
+from dresscode.diff import DiffError, ResolvedScope, require_current_snapshot
 from dresscode.entries import Entry
 from dresscode.run import ContextRecord, RunError, RunState
 
@@ -48,7 +48,6 @@ def required_context(
     config: Configuration,
     entry: Entry,
     state: RunState,
-    fingerprint: str,
     scope: ResolvedScope,
 ) -> ContextRecord:
     if not trusted(config, entry):
@@ -60,7 +59,7 @@ def required_context(
         previous = state["contexts"].get(entry.id)
         if (
             previous
-            and previous["fingerprint"] == fingerprint
+            and previous["head_commit"] == scope.head_commit
             and previous["command"] == entry.context
         ):
             return previous
@@ -73,19 +72,32 @@ def required_context(
         error=error,
         context_output="",
         command=entry.context or "",
-        fingerprint=fingerprint,
+        head_commit=scope.head_commit,
     )
 
 
-def execute(
-    config: Configuration, entry: Entry, fingerprint: str, scope: ResolvedScope
+def collect_contexts(
+    config: Configuration, entries: list[Entry], scope: ResolvedScope
+) -> dict[str, ContextRecord]:
+    records = {entry.id: _execute(config, entry, scope) for entry in entries}
+    try:
+        require_current_snapshot(scope)
+    except DiffError as error:
+        raise DiffError(
+            f"Checkout changed while collecting context; no context was saved. {error}"
+        ) from error
+    return records
+
+
+def _execute(
+    config: Configuration, entry: Entry, scope: ResolvedScope
 ) -> ContextRecord:
     record = ContextRecord(
         state="context_untrusted",
         error=f"Run dresscode trust, then dresscode list --base {scope.base_commit}.",
         context_output="",
         command=entry.context or "",
-        fingerprint=fingerprint,
+        head_commit=scope.head_commit,
     )
     if not trusted(config, entry):
         return record

@@ -1,5 +1,4 @@
 import json
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -8,11 +7,12 @@ from typer.testing import CliRunner
 
 from dresscode.cli import app
 from dresscode.config import load
-from dresscode.diff import collect, resolve_scope
+from dresscode.diff import resolve_scope
 from dresscode.entries import Entry
 from dresscode.repo import discover
 from dresscode.run import RunStore
 from dresscode.store import Counters, EntryStore, StoreError
+from dresscode.test_diff import commit_all, git
 
 runner = CliRunner()
 RULES = """\
@@ -27,12 +27,6 @@ exclude = ["*.skip"]
 """
 
 
-def git(root: Path, *arguments: str) -> str:
-    return subprocess.run(
-        ["git", *arguments], cwd=root, check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
 @pytest.fixture(autouse=True)
 def in_repository(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(git_repo)
@@ -40,19 +34,20 @@ def in_repository(git_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def configure(repository: Path) -> None:
     (repository / ".dresscode.toml").write_text(RULES)
+    commit_all(repository)
 
 
 def answer(*arguments: str):
     return runner.invoke(app, ["answer", *arguments])
 
 
-def test_answer_records_evidence_fingerprint_and_reveal_after_persisting(
+def test_answer_records_evidence_head_commit_and_reveal_after_persisting(
     git_repo: Path,
 ) -> None:
     configure(git_repo)
     repository = discover(git_repo)
     config = load(repository)
-    fingerprint = collect(config).fingerprint
+    head_commit = git(git_repo, "rev-parse", "HEAD")
     before = git(git_repo, "status", "--porcelain")
 
     result = answer(
@@ -70,14 +65,13 @@ def test_answer_records_evidence_fingerprint_and_reveal_after_persisting(
         "expected": "yes",
         "matched": True,
         "evidence": "Reused the shared fixture.",
-        "fingerprint": fingerprint,
         "timestamp": record["timestamp"],
         "reveal": "Keep test setup consistent.",
     }
     assert record == {
         "verdict": "yes",
         "evidence": "Reused the shared fixture.",
-        "fingerprint": fingerprint,
+        "head_commit": head_commit,
         "timestamp": record["timestamp"],
     }
     assert record["timestamp"]
@@ -105,6 +99,10 @@ def test_answer_replaces_current_verdict_and_keeps_history_and_counters(
     state = RunStore(resolve_scope(load(repository))).read()
     assert state["verdicts"]["factory"]["verdict"] == "n-a"
     assert [item["verdict"] for item in state["history"]] == ["yes", "no"]
+    assert all(
+        item["head_commit"] == git(git_repo, "rev-parse", "HEAD")
+        for item in state["history"]
+    )
     counters = EntryStore(repository).counters("factory")
     assert counters.asked == 3
     assert counters.violated == 1
@@ -157,22 +155,31 @@ def test_counter_failure_rolls_back_the_saved_verdict(
     assert EntryStore(repository).counters("factory") == counters
 
 
-def test_staleness_uses_scoped_diff_fingerprint(git_repo: Path) -> None:
+@pytest.mark.parametrize("change", ["source", "excluded", "empty", "amend"])
+def test_approvals_expire_at_a_different_commit_and_return_with_the_saved_commit(
+    git_repo: Path, change: str
+) -> None:
     configure(git_repo)
+    saved = git(git_repo, "rev-parse", "HEAD")
     result = answer("factory", "--yes", "--evidence", "Reviewed", "--json")
     assert result.exit_code == 0, result.output
-    run = RunStore(resolve_scope(load(discover(git_repo))))
-    config = load(discover(git_repo))
-    fingerprint = collect(config).fingerprint
-    assert run.stale_verdicts(fingerprint) == ()
+    if change == "amend":
+        git(git_repo, "commit", "--amend", "-m", "Change only the message")
+    elif change == "empty":
+        git(git_repo, "commit", "--allow-empty", "-m", "New commit, same tree")
+    else:
+        (git_repo / ("notes.skip" if change == "excluded" else "new.py")).write_text(
+            "change\n"
+        )
+        commit_all(git_repo)
 
-    (git_repo / "notes.skip").write_text("excluded\n")
-    assert run.stale_verdicts(collect(load(discover(git_repo))).fingerprint) == ()
-
-    (git_repo / "new.py").write_text("scoped change\n")
-    assert run.stale_verdicts(collect(load(discover(git_repo))).fingerprint) == (
-        "factory",
-    )
+    stale = runner.invoke(app, ["check", "--json"])
+    assert stale.exit_code == 1, stale.output
+    assert json.loads(stale.stdout)["entries"][0]["state"] == "stale"
+    git(git_repo, "reset", "--hard", saved)
+    restored = runner.invoke(app, ["check", "--json"])
+    assert restored.exit_code == 0, restored.output
+    assert json.loads(restored.stdout)["head_commit"] == saved
 
 
 def test_reset_clears_current_answers_and_waivers_but_preserves_counters(
@@ -187,7 +194,7 @@ def test_reset_clears_current_answers_and_waivers_but_preserves_counters(
     history_before = state["history"]
     state["waivers"]["factory"] = {
         "reason": "Accepted",
-        "fingerprint": state["verdicts"]["factory"]["fingerprint"],
+        "head_commit": state["verdicts"]["factory"]["head_commit"],
         "timestamp": state["verdicts"]["factory"]["timestamp"],
     }
     run.path.write_text(json.dumps(state))

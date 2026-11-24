@@ -10,10 +10,11 @@ import pytest
 
 from dresscode.config import layer_paths
 from dresscode.repo import discover
-from dresscode.test_workflow import cli, document, git
+from dresscode.test_diff import commit_all, git
+from dresscode.test_workflow import cli, document
 
 
-def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated(
+def test_two_baselines_at_same_head_keep_evidence_verdicts_and_reset_isolated(
     workflow_repo: Path, xdg_home: Path
 ) -> None:
     root = workflow_repo
@@ -29,27 +30,21 @@ def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated
     git(root, "commit", "--allow-empty", "-m", "Second baseline, same tree")
     second = git(root, "rev-parse", "HEAD").strip()
     (root / "committed.txt").write_text("committed\n")
-    git(root, "add", "committed.txt")
-    git(root, "commit", "-m", "Committed work")
-    (root / "staged.txt").write_text("staged\n")
-    git(root, "add", "staged.txt")
-    (root / "README.md").write_text("unstaged\n")
-    (root / "new.txt").write_text("untracked\n")
     (root / "uv.lock").write_text("excluded\n")
+    commit_all(root)
     a = document(root, "diff", "--base", first)
     b = document(root, "diff", "--base", second)
-    assert a["fingerprint"] == b["fingerprint"]
+    assert a["head_commit"] == b["head_commit"] == git(root, "rev-parse", "HEAD")
     assert a["run_key"] != b["run_key"]
-    assert {file["path"] for file in a["files"]} == {
-        "committed.txt",
-        "staged.txt",
-        "README.md",
-        "new.txt",
-    }
+    assert (
+        a["files"]
+        == b["files"]
+        == [{"path": "committed.txt", "added": 1, "removed": 0}]
+    )
     cli(root, "trust")
     listed = document(root, "list", "--base", first)
     context_a = listed["entries"][0]["context_output"]
-    assert json.loads(context_a)["base_commit"] == first
+    assert json.loads(context_a) == a
     assert all(not {"expects", "reveal"} & entry.keys() for entry in listed["entries"])
     for identifier, verdict in [
         ("size", "yes"),
@@ -68,7 +63,7 @@ def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated
         )
     assert document(root, "check", "--strict", "--base", "alias")["status"] == "passed"
     assert document(root, "check")["run_key"] == a["run_key"]
-    # Equal fingerprints cannot deliver A's context into B's run.
+    # Reviewing the same HEAD against another baseline requires its own context.
     blocked = document(
         root,
         "answer",
@@ -88,7 +83,7 @@ def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated
             if " trust" not in remedy:
                 assert f"--base {second}" in remedy
     context_b = document(root, "list", "--base", second)["entries"][0]["context_output"]
-    assert json.loads(context_b)["base_commit"] == second
+    assert json.loads(context_b) == b
     for identifier, verdict in [
         ("size", "yes"),
         ("side-effects", "yes"),
@@ -131,12 +126,6 @@ def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated
         name = hashlib.sha256(scope["run_key"].encode()).hexdigest() + ".json"
         state = json.loads((xdg_home / "state/dresscode/runs" / name).read_text())
         assert len(state["history"]) == count
-    # Staging and committing against fixed SHAs preserve fingerprints and answers.
-    git(root, "add", ".")
-    git(root, "commit", "-m", "Commit reviewed content")
-    assert document(root, "diff", "--base", first)["fingerprint"] == a["fingerprint"]
-    (root / "uv.lock").write_text("different excluded content\n")
-    assert document(root, "check", "--base", first)["status"] == "passed"
     document(root, "reset", "--base", first)
     assert (
         document(root, "check", "--base", first, code=1)["entries"][0]["state"]
@@ -147,11 +136,14 @@ def test_two_equal_fingerprint_reviews_keep_evidence_verdicts_and_reset_isolated
         document(root, "report", "--base", second)["entries"][0]["context_output"]
         == context_b
     )
-    (root / "committed.txt").write_text("scoped edit after review\n")
-    assert (
-        document(root, "check", "--base", second, code=1)["entries"][0]["state"]
-        == "stale"
-    )
+    (root / "uv.lock").write_text("different excluded content\n")
+    assert "uv.lock" in document(root, "check", "--base", second, code=2)["error"]
+    commit_all(root)
+    changed = document(root, "diff", "--base", second)
+    assert changed["head_commit"] != b["head_commit"]
+    assert changed["files"] == b["files"]
+    stale = document(root, "check", "--base", second, code=1)
+    assert {entry["state"] for entry in stale["entries"]} == {"stale"}
 
 
 def test_moving_ref_inspection_and_inherited_baseline_precedence(
@@ -224,21 +216,3 @@ def test_context_pins_ref_before_movement_and_allows_explicit_auxiliary_scope(
         json.loads(auxiliary["entries"][0]["context_output"])["base_commit"] == second
     )
     assert document(root, "diff")["base_commit"] == first
-
-
-def test_exact_submodule_baseline_is_stable_and_dirty_content_blocks(
-    submodule_repo: tuple[Path, Path],
-) -> None:
-    root, submodule = submodule_repo
-    baseline = git(root, "rev-parse", "HEAD").strip()
-    (submodule / "file.txt").write_text("new\n")
-    git(submodule, "commit", "-am", "Update submodule")
-    first = document(root, "diff", "--base", baseline)
-    assert first["files"] == [{"path": "lib", "added": 1, "removed": 1}]
-    git(root, "add", "lib")
-    git(root, "commit", "-m", "Stage pointer")
-    assert document(root, "diff", "--base", baseline) == first
-    (submodule / "file.txt").write_text("dirty\n")
-    assert (
-        "dirty submodule" in document(root, "diff", "--base", baseline, code=2)["error"]
-    )
