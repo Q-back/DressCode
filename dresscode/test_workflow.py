@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from dresscode.test_diff import commit_all, git
 
 
@@ -89,8 +91,12 @@ def test_report_groups_multiple_rules_and_preserves_json(workflow_repo: Path):
         assert f"size [{waiver['state']}]: {reason}" in rendered.split("Waivers\n")[1]
 
 
-def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Path):
+def test_waived_review_covers_intermediate_commits_and_expires(
+    workflow_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     root = workflow_repo
+    trace = tmp_path / "git-trace"
+    monkeypatch.setenv("GIT_TRACE", str(trace))
     cli(root, "trust")
     initial = document(root, "check", code=1)
     assert initial["status"] == "failed"
@@ -113,6 +119,7 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
     assert pending["status"] == "failed"
     assert any(entry["state"] == "unanswered" for entry in pending["entries"])
     scoped = document(root, "diff")
+    assert trace.read_text().count(" --numstat ") == 1
     assert {item["path"] for item in scoped["files"]} == {"first.txt", "second.txt"}
     assert scoped["totals"] == {"added": 2, "removed": 0}
     status_before = git(root, "status", "--porcelain=v1", "--untracked-files=all")
@@ -143,11 +150,14 @@ def test_waived_review_covers_intermediate_commits_and_expires(workflow_repo: Pa
     strict = document(root, "check", "--strict", code=1)
     assert strict["status"] == "failed"
     assert any(entry["state"] == "waived" for entry in strict["entries"])
+    # Only the standalone diff and the diff requested by the context use numstat.
+    assert trace.read_text().count(" --numstat ") == 2
     report = cli(root, "report").stdout
     assert "passed-with-waivers" in report and "Waivers" in report
     assert reason in " ".join(report.split())
     assert "\x1b[" not in report
     summary = document(root, "report")
+    assert trace.read_text().count(" --numstat ") == 4
     assert summary["entries"][0]["context_output"] == context_output
     assert summary["waivers"][0]["state"] == "current"
     assert (
